@@ -1,0 +1,5 @@
+{
+  "name": "Retro Invoice & Expense Tracker",
+  "description": "A GameBoy-inspired finance app for freelancers to manage invoices, per diems, and expenses. Features OCR for receipts, dual Google Drive folder integration, and a nostalgic 8-bit interface.",
+  "requestFramePermissions": []
+}
