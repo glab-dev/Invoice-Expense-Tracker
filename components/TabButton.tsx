@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface TabButtonProps {
@@ -8,13 +7,14 @@ interface TabButtonProps {
 }
 
 const TabButton: React.FC<TabButtonProps> = ({ children, onClick, active }) => {
-  const baseClasses = 'font-bold uppercase tracking-wider text-xs sm:text-sm px-3 py-2 border-2 pixel-corners transition-all duration-150 transform active:translate-y-px flex-grow text-center';
-  const activeClasses = 'bg-yellow-400 text-black border-yellow-400';
-  const inactiveClasses = 'bg-black text-green-500 border-green-500 hover:bg-green-500 hover:text-black';
+  // Use skew to give it a dynamic comic feel
+  const baseClasses = 'font-comic-title uppercase tracking-wider text-lg sm:text-xl px-4 py-3 border-2 border-black transition-all duration-150 transform flex-grow text-center -skew-x-6 mx-1';
+  const activeClasses = 'bg-cyan-400 text-black comic-shadow shadow-black translate-y-[-2px] z-10';
+  const inactiveClasses = 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white hover:translate-y-[-1px]';
 
   return (
     <button onClick={onClick} className={`${baseClasses} ${active ? activeClasses : inactiveClasses}`}>
-      {children}
+      <span className="block skew-x-6">{children}</span>
     </button>
   );
 };

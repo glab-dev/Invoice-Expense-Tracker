@@ -17,6 +17,7 @@ export interface InvoiceItem {
   rate: number;
   amount: number; // This will be quantity * rate
   perDiemQuantity: number;
+  perDiemCurrency: 'CAD' | 'USD'; // Added for currency selection
   approver: string;
 }
 

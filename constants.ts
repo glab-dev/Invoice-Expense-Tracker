@@ -23,7 +23,7 @@ export const MOCK_INVOICES: Invoice[] = [
         companyId: 'comp-2', 
         date: '2024-07-18', 
         items: [
-            { id: 'item-1', startDate: '2024-07-16', endDate: '2024-07-17', description: 'Audio Engineer', quantity: 2, unit: 'Day', rate: 550, amount: 1100, perDiemQuantity: 2, approver: 'Jane Doe' },
+            { id: 'item-1', startDate: '2024-07-16', endDate: '2024-07-17', description: 'Audio Engineer', quantity: 2, unit: 'Day', rate: 550, amount: 1100, perDiemQuantity: 2, perDiemCurrency: 'CAD', approver: 'Jane Doe' },
         ],
         attachedExpenseIds: ['exp-1', 'exp-2'],
         notes: 'Thanks for the great gig!',
@@ -33,7 +33,7 @@ export const MOCK_INVOICES: Invoice[] = [
 ];
 
 export const CURRENCY_RATES: { [key: string]: number } = {
-  'USD': 1.37,
+  'USD': 1.379333333,
   'EUR': 1.48,
   'GBP': 1.74,
   'CAD': 1.00,

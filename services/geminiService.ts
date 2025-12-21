@@ -43,13 +43,13 @@ export interface InvoiceOcrResult {
 }
 
 /**
- * Extracts expense data from a receipt image using Gemini Vision.
- * @param imageBase64 The base64 encoded image string.
- * @param mimeType The MIME type of the image (e.g., 'image/jpeg').
+ * Extracts expense data from a receipt image or PDF using Gemini Vision.
+ * @param fileBase64 The base64 encoded file string.
+ * @param mimeType The MIME type of the file (e.g., 'image/jpeg', 'application/pdf').
  * @param availableCategories The user-defined list of categories to choose from.
  * @returns A promise that resolves to the extracted expense data.
  */
-export const extractReceiptData = async (imageBase64: string, mimeType: string, availableCategories: string[]): Promise<OcrResult | null> => {
+export const extractReceiptData = async (fileBase64: string, mimeType: string, availableCategories: string[]): Promise<OcrResult | null> => {
   if (!API_KEY) {
     console.error("Cannot call Gemini API: API key is missing.");
     return {
@@ -61,20 +61,20 @@ export const extractReceiptData = async (imageBase64: string, mimeType: string, 
     };
   }
   try {
-    const imagePart = {
+    const filePart = {
       inlineData: {
-        data: imageBase64,
+        data: fileBase64,
         mimeType,
       },
     };
 
     const textPart = {
-      text: `Analyze this receipt image. Extract the vendor name or a brief description, the transaction date (YYYY-MM-DD), the total amount, and the currency code (e.g., USD, CAD). Also, categorize it into one of the following: ${availableCategories.join(', ')}. Respond with ONLY a valid JSON object.`,
+      text: `Analyze this receipt document. Extract the vendor name or a brief description, the transaction date (YYYY-MM-DD), the total amount, and the currency code (e.g., USD, CAD). Also, categorize it into one of the following: ${availableCategories.join(', ')}. Respond with ONLY a valid JSON object.`,
     };
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: { parts: [imagePart, textPart] },
+      contents: { parts: [filePart, textPart] },
       config: {
         responseMimeType: "application/json",
         responseSchema: {

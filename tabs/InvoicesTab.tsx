@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Button from '../components/Button';
@@ -6,9 +5,13 @@ import Modal from '../components/Modal';
 import { Invoice, InvoiceItem, Company, Expense, UserProfile } from '../types';
 import { extractInvoiceData, InvoiceOcrResult } from '../services/geminiService';
 import { convertToCAD } from '../services/currencyService';
+import { CURRENCY_RATES } from '../constants';
 
 type NewInvoiceData = Omit<Invoice, 'id' | 'invoiceNumber'>;
 type NewInvoiceItemData = Omit<InvoiceItem, 'id' | 'amount'>;
+
+const inputClass = "w-full bg-gray-700 text-white border-2 border-black p-2 font-bold focus:outline-none focus:shadow-[4px_4px_0_rgba(255,255,255,0.2)] transition-shadow placeholder-gray-400";
+const labelClass = "block text-white font-bold mb-1 uppercase tracking-wide text-sm";
 
 const InvoiceForm: React.FC<{
     invoice?: Invoice | null;
@@ -20,7 +23,7 @@ const InvoiceForm: React.FC<{
     const [date, setDate] = useState(invoice?.date || new Date().toISOString().split('T')[0]);
     
     const initialItems = invoice?.items.map(item => ({...item})) || 
-        [{ startDate: new Date().toISOString().split('T')[0], endDate: null, description: '', quantity: 1, unit: 'Day' as const, rate: companies.find(c => c.id === (invoice?.companyId || companies[0]?.id))?.defaultRate || 0, approver: '', perDiemQuantity: 0 }];
+        [{ startDate: new Date().toISOString().split('T')[0], endDate: null, description: '', quantity: 1, unit: 'Day' as const, rate: companies.find(c => c.id === (invoice?.companyId || companies[0]?.id))?.defaultRate || 0, approver: '', perDiemQuantity: 0, perDiemCurrency: 'CAD' as const }];
 
     const [items, setItems] = useState<NewInvoiceItemData[]>(initialItems);
     const [notes, setNotes] = useState(invoice?.notes || '');
@@ -53,6 +56,7 @@ const InvoiceForm: React.FC<{
 
         (currentItem as any)[field] = value;
         
+        // Auto-calculate quantity only if both Start Date and End Date are present (and valid)
         if ((field === 'startDate' || field === 'endDate') && (currentItem.unit === 'Day' || currentItem.unit === 'Half-Day')) {
             const { startDate, endDate } = currentItem;
             if (startDate && endDate && new Date(endDate) >= new Date(startDate)) {
@@ -61,9 +65,12 @@ const InvoiceForm: React.FC<{
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
                 currentItem.quantity = diffDays > 0 ? diffDays : 1;
-            } else {
-                currentItem.quantity = 1;
             }
+        }
+        
+        // If user manually changes quantity back to 1, clear the end date
+        if (field === 'quantity' && Number(value) === 1) {
+            currentItem.endDate = null;
         }
         
         if (field === 'unit' && company) {
@@ -77,7 +84,7 @@ const InvoiceForm: React.FC<{
         setItems(newItems);
     };
 
-    const addItem = () => setItems([...items, { startDate: new Date().toISOString().split('T')[0], endDate: null, description: '', quantity: 1, unit: 'Day', rate: companies.find(c => c.id === companyId)?.defaultRate || 0, approver: '', perDiemQuantity: 0 }]);
+    const addItem = () => setItems([...items, { startDate: new Date().toISOString().split('T')[0], endDate: null, description: '', quantity: 1, unit: 'Day', rate: companies.find(c => c.id === companyId)?.defaultRate || 0, approver: '', perDiemQuantity: 0, perDiemCurrency: 'CAD' }]);
     const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index));
 
     const handleExpenseToggle = (expId: string) => {
@@ -93,6 +100,7 @@ const InvoiceForm: React.FC<{
                 id: (item as InvoiceItem).id || `item-${Date.now()}-${Math.random()}`,
                 amount: (item.quantity || 0) * (item.rate || 0),
                 perDiemQuantity: Number(item.perDiemQuantity) || 0,
+                perDiemCurrency: item.perDiemCurrency || 'CAD',
             })),
             attachedExpenseIds: attachedExpenseIds,
             notes,
@@ -108,92 +116,127 @@ const InvoiceForm: React.FC<{
     }
 
     return (
-        <div className="space-y-6 text-lg">
+        <div className="space-y-6 text-lg font-comic-body">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-green-500 font-bold mb-1">Company</label>
-                    <select value={companyId} onChange={e => setCompanyId(e.target.value)} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400">
+                    <label className={labelClass}>Company</label>
+                    <select value={companyId} onChange={e => setCompanyId(e.target.value)} className={inputClass}>
                         {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 </div>
                 <div>
-                    <label className="block text-green-500 font-bold mb-1">Invoice Date</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+                    <label className={labelClass}>Invoice Date</label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inputClass} />
                 </div>
             </div>
             
-            <div>
-                <h3 className="text-fuchsia-500 font-bold mb-2 border-b-2 border-fuchsia-700 pb-1">Line Items</h3>
+            <div className="bg-cyan-900/30 p-4 border-2 border-black border-dashed">
+                <h3 className="font-comic-title text-xl text-white mb-2 pb-1 border-b-2 border-black">Line Items</h3>
                  {items.map((item, index) => {
                      const amount = (item.quantity || 0) * (item.rate || 0);
-                     const isQtyAutoCalculated = !!(item.startDate && item.endDate && (item.unit === 'Day' || item.unit === 'Half-Day'));
+                     const isHourly = item.unit === 'Hourly';
+                     // Only show end date if not hourly AND (quantity > 1 OR endDate exists)
+                     const showEndDate = !isHourly && ((item.quantity || 0) > 1 || !!item.endDate);
+
                      return (
-                        <div key={index} className="border-2 border-green-500 p-3 mb-3 pixel-corners space-y-3 relative">
-                            <button onClick={() => removeItem(index)} className="absolute top-1 right-2 text-red-500 font-bold text-2xl hover:text-red-400">×</button>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                                <div className="sm:col-span-1">
-                                    <label className="block text-green-500 text-sm font-bold mb-1">Start Date</label>
-                                    <input type="date" value={item.startDate} onChange={e => handleItemChange(index, 'startDate', e.target.value)} className="bg-black text-white border-2 border-green-500 p-1 text-sm w-full focus:outline-none focus:border-yellow-400" />
+                        <div key={index} className="bg-gray-700 border-2 border-black p-4 mb-4 relative shadow-[4px_4px_0_rgba(0,0,0,0.5)]">
+                            <button onClick={() => removeItem(index)} className="absolute top-0 right-0 bg-red-600 text-white font-bold w-6 h-6 flex items-center justify-center border-l-2 border-b-2 border-black hover:bg-red-500">×</button>
+                            
+                            {showEndDate ? (
+                                <>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                                        <div>
+                                            <label className={labelClass}>Start Date</label>
+                                            <input type="date" value={item.startDate} onChange={e => handleItemChange(index, 'startDate', e.target.value)} className={inputClass} />
+                                        </div>
+                                        <div>
+                                            <label className={labelClass}>End Date</label>
+                                            <input type="date" value={item.endDate || ''} onChange={e => handleItemChange(index, 'endDate', e.target.value || null)} className={inputClass} />
+                                        </div>
+                                    </div>
+                                    <div className="mt-3">
+                                        <label className={labelClass}>Description</label>
+                                        <input type="text" placeholder="Description" value={item.description} onChange={e => handleItemChange(index, 'description', e.target.value)} className={inputClass} />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mt-2">
+                                    <div className="sm:col-span-4">
+                                        <label className={labelClass}>Date</label>
+                                        <input type="date" value={item.startDate} onChange={e => handleItemChange(index, 'startDate', e.target.value)} className={inputClass} />
+                                    </div>
+                                    <div className="sm:col-span-8">
+                                        <label className={labelClass}>Description</label>
+                                        <input type="text" placeholder="Description" value={item.description} onChange={e => handleItemChange(index, 'description', e.target.value)} className={inputClass} />
+                                    </div>
                                 </div>
-                                <div className="sm:col-span-1">
-                                    <label className="block text-green-500 text-sm font-bold mb-1">End Date</label>
-                                    <input type="date" value={item.endDate || ''} onChange={e => handleItemChange(index, 'endDate', e.target.value || null)} className="bg-black text-white border-2 border-green-500 p-1 text-sm w-full focus:outline-none focus:border-yellow-400" />
-                                </div>
-                                <div className="col-span-1 sm:col-span-2 md:col-span-4 lg:col-span-3">
-                                    <label className="block text-green-500 text-sm font-bold mb-1">Description</label>
-                                    <input type="text" placeholder="Description" value={item.description} onChange={e => handleItemChange(index, 'description', e.target.value)} className="bg-black text-white border-2 border-green-500 p-1 text-sm w-full focus:outline-none focus:border-yellow-400" />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                            )}
+                            
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
                                 <div>
-                                    <label className="block text-green-500 text-sm font-bold mb-1">Qty</label>
-                                    <input type="number" placeholder="Qty" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', parseFloat(e.target.value))} disabled={isQtyAutoCalculated} className={`w-full border-2 border-green-500 p-1 text-sm ${isQtyAutoCalculated ? 'bg-gray-900 text-gray-500' : 'bg-black text-white focus:outline-none focus:border-yellow-400'}`} />
+                                    <label className={labelClass}>Qty</label>
+                                    <input type="number" placeholder="Qty" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', parseFloat(e.target.value))} className={inputClass} />
                                 </div>
                                 <div>
-                                    <label className="block text-green-500 text-sm font-bold mb-1">Unit</label>
-                                    <select value={item.unit} onChange={e => handleItemChange(index, 'unit', e.target.value as 'Day'|'Half-Day'|'Hourly')} className="w-full bg-black text-white border-2 border-green-500 p-1 text-sm h-[34px] focus:outline-none focus:border-yellow-400">
+                                    <label className={labelClass}>Unit</label>
+                                    <select value={item.unit} onChange={e => handleItemChange(index, 'unit', e.target.value as 'Day'|'Half-Day'|'Hourly')} className={inputClass}>
                                         <option value="Day">Day</option><option value="Half-Day">Half-Day</option><option value="Hourly">Hourly</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-green-500 text-sm font-bold mb-1">Rate</label>
-                                    <input type="number" placeholder="Rate" value={item.rate} onChange={e => handleItemChange(index, 'rate', parseFloat(e.target.value))} className="w-full bg-black text-white border-2 border-green-500 p-1 text-sm focus:outline-none focus:border-yellow-400" />
+                                    <label className={labelClass}>Rate</label>
+                                    <input type="number" placeholder="Rate" value={item.rate} onChange={e => handleItemChange(index, 'rate', parseFloat(e.target.value))} className={inputClass} />
                                 </div>
                                 <div>
-                                    <label className="block text-gray-500 text-sm font-bold mb-1">Amount</label>
-                                    <input type="number" placeholder="Total" value={amount.toFixed(2)} disabled className="w-full bg-gray-900 border-2 border-green-900 p-1 text-sm text-gray-500" />
+                                    <label className="block text-gray-400 font-bold mb-1 uppercase tracking-wide text-sm">Amount</label>
+                                    <input type="number" placeholder="Total" value={amount.toFixed(2)} disabled className="w-full bg-gray-600 border-2 border-gray-500 p-2 text-gray-300 font-bold" />
                                 </div>
-                                <div>
-                                    <label className="block text-green-500 text-sm font-bold mb-1">PD (days)</label>
-                                    <input type="number" placeholder="PD (days)" value={item.perDiemQuantity} onChange={e => handleItemChange(index, 'perDiemQuantity', parseInt(e.target.value, 10))} className="w-full bg-black text-white border-2 border-green-500 p-1 text-sm focus:outline-none focus:border-yellow-400" />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-3">
+                                <div className="sm:col-span-2">
+                                    <div className="flex gap-2">
+                                        <div className="flex-1">
+                                            <label className={`${labelClass} whitespace-nowrap`}>PD (Days)</label>
+                                            <input type="number" placeholder="PDs" value={item.perDiemQuantity} onChange={e => handleItemChange(index, 'perDiemQuantity', parseInt(e.target.value, 10))} className={inputClass} />
+                                        </div>
+                                        <div className="w-24">
+                                            <label className={labelClass}>Cur.</label>
+                                            <select value={item.perDiemCurrency || 'CAD'} onChange={e => handleItemChange(index, 'perDiemCurrency', e.target.value)} className={`${inputClass} !px-1`}>
+                                                <option value="CAD">CAD</option>
+                                                <option value="USD">USD</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="col-span-2 lg:col-span-1">
-                                    <label className="block text-green-500 text-sm font-bold mb-1">Approver</label>
-                                    <input type="text" placeholder="Name" value={item.approver} onChange={e => handleItemChange(index, 'approver', e.target.value)} className="w-full bg-black text-white border-2 border-green-500 p-1 text-sm focus:outline-none focus:border-yellow-400" />
+                                <div className="sm:col-span-2">
+                                    <label className={labelClass}>Approver</label>
+                                    <input type="text" placeholder="Name" value={item.approver} onChange={e => handleItemChange(index, 'approver', e.target.value)} className={inputClass} />
                                 </div>
                             </div>
                         </div>
                 )})}
-                <Button variant="secondary" onClick={addItem} className="text-xs !py-1 mt-2">+ Add Item</Button>
+                <Button variant="secondary" onClick={addItem} className="text-sm py-1 mt-2"> + Add Item </Button>
             </div>
 
-            <div>
-                <h3 className="text-fuchsia-500 font-bold mb-2 border-b-2 border-fuchsia-700 pb-1">Attach Expenses</h3>
+            <div className="bg-yellow-900/30 p-4 border-2 border-black border-dashed">
+                <h3 className="font-comic-title text-xl text-white mb-2 border-b-2 border-black pb-1">Attach Expenses</h3>
                 <div className="space-y-2 max-h-32 overflow-y-auto pr-2">
                     {availableExpenses.length > 0 ? availableExpenses.map(exp => (
-                        <label key={exp.id} className="flex items-center gap-2 p-2 bg-black text-white border-2 border-green-500 text-sm cursor-pointer hover:bg-gray-900">
-                            <input type="checkbox" checked={attachedExpenseIds.includes(exp.id)} onChange={() => handleExpenseToggle(exp.id)} className="w-4 h-4" />
-                            <span>{exp.date} - {exp.description} (${exp.cadAmount.toFixed(2)})</span>
+                        <label key={exp.id} className="flex items-center gap-2 p-2 bg-gray-700 text-white border-2 border-black cursor-pointer hover:bg-yellow-900 transition-colors">
+                            <input type="checkbox" checked={attachedExpenseIds.includes(exp.id)} onChange={() => handleExpenseToggle(exp.id)} className="w-5 h-5 accent-yellow-400" />
+                            <span className="font-bold">{exp.date}</span>
+                            <span>- {exp.description} (${exp.cadAmount.toFixed(2)})</span>
                         </label>
-                    )) : <p className="text-sm text-gray-400">No billable expenses available.</p>}
+                    )) : <p className="text-sm text-gray-400 italic">No billable expenses available.</p>}
                 </div>
             </div>
 
             <div>
-                <label className="block text-green-500 font-bold mb-1">Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400 text-base" />
+                <label className={labelClass}>Notes</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={inputClass} />
             </div>
-            <div className="mt-6 flex justify-end gap-4">
+            <div className="mt-6 flex justify-end gap-4 border-t-2 border-black pt-4">
                 <Button variant="secondary" onClick={onCancel}>Cancel</Button>
                 <Button onClick={handleSubmit}>{invoice ? 'Update Invoice' : 'Save Invoice'}</Button>
             </div>
@@ -206,17 +249,31 @@ const getInvoicePrintableContent = (invoice: Invoice, company: Company | undefin
     
     const defaultPerDiem = toNum(company?.defaultPerDiem);
     const subtotal = invoice.items.reduce((sum, item) => sum + toNum(item.amount), 0);
-    const hst = subtotal * toNum(invoice.hstRate);
-    const perDiemsTotal = invoice.items.reduce((sum, item) => sum + (toNum(item.perDiemQuantity) * defaultPerDiem), 0);
+    
+    // Calculate PD Total converting USD to CAD if needed
+    const perDiemsTotal = invoice.items.reduce((sum, item) => {
+        const rate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+        return sum + (toNum(item.perDiemQuantity) * defaultPerDiem * rate);
+    }, 0);
+
+    const hst = (subtotal + perDiemsTotal) * toNum(invoice.hstRate);
+
     const expensesTotal = attachedExpenses.reduce((sum, exp) => sum + toNum(exp.cadAmount), 0);
     const grandTotal = subtotal + hst + perDiemsTotal + expensesTotal;
 
     const itemsHtml = invoice.items.map(item => {
         const itemAmount = toNum(item.amount);
-        const perDiemAmount = toNum(item.perDiemQuantity) * defaultPerDiem;
-        const lineTotal = itemAmount + perDiemAmount;
+        
+        const currencyRate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+        const perDiemCadAmount = toNum(item.perDiemQuantity) * defaultPerDiem * currencyRate;
+        
+        const lineTotal = itemAmount + perDiemCadAmount;
         const dateDisplay = item.endDate ? `${item.startDate} to ${item.endDate}` : item.startDate;
         
+        const pdDisplay = item.perDiemQuantity > 0 
+            ? `$${(toNum(item.perDiemQuantity) * defaultPerDiem).toFixed(2)} ${item.perDiemCurrency}` 
+            : '-';
+
         return `
             <tr class="border-b">
                 <td class="py-2 px-1">${dateDisplay}</td>
@@ -224,7 +281,7 @@ const getInvoicePrintableContent = (invoice: Invoice, company: Company | undefin
                 <td class="py-2 px-1 text-center">${toNum(item.quantity)} ${item.unit}</td>
                 <td class="py-2 px-1 text-right">$${toNum(item.rate).toFixed(2)}</td>
                 <td class="py-2 px-1 text-center">${toNum(item.perDiemQuantity)}</td>
-                <td class="py-2 px-1 text-right">$${toNum(perDiemAmount).toFixed(2)}</td>
+                <td class="py-2 px-1 text-right text-xs">${pdDisplay}</td>
                 <td class="py-2 px-1 text-right font-bold">$${toNum(lineTotal).toFixed(2)}</td>
                 <td class="py-2 px-1">${item.approver}</td>
             </tr>
@@ -249,7 +306,7 @@ const getInvoicePrintableContent = (invoice: Invoice, company: Company | undefin
     ` : '';
     
     return `
-        <div class="p-8 font-sans">
+        <div class="p-8 font-sans text-black bg-white">
             <div class="flex justify-between items-start mb-8">
                 <div>
                     <h1 class="text-4xl font-bold">INVOICE</h1>
@@ -278,7 +335,7 @@ const getInvoicePrintableContent = (invoice: Invoice, company: Company | undefin
                         <th class="py-2 px-1 text-center">Quantity</th>
                         <th class="py-2 px-1 text-right">Rate</th>
                         <th class="py-2 px-1 text-center">PD Qty</th>
-                        <th class="py-2 px-1 text-right">PD Amount</th>
+                        <th class="py-2 px-1 text-right">PD Amt</th>
                         <th class="py-2 px-1 text-right">Line Total</th>
                         <th class="py-2 px-1">Approver</th>
                     </tr>
@@ -293,8 +350,8 @@ const getInvoicePrintableContent = (invoice: Invoice, company: Company | undefin
                 </div>
                 <div class="w-80 space-y-2 text-right">
                     <div class="flex justify-between"><span class="font-bold">Subtotal:</span><span>$${toNum(subtotal).toFixed(2)}</span></div>
+                    <div class="flex justify-between"><span class="font-bold">Per Diems (CAD):</span><span>$${toNum(perDiemsTotal).toFixed(2)}</span></div>
                     <div class="flex justify-between"><span class="font-bold">GST/HST (${(toNum(invoice.hstRate) * 100).toFixed(0)}%):</span><span>$${toNum(hst).toFixed(2)}</span></div>
-                    <div class="flex justify-between"><span class="font-bold">Per Diems:</span><span>$${toNum(perDiemsTotal).toFixed(2)}</span></div>
                     <div class="flex justify-between border-b pb-2"><span class="font-bold">Expenses:</span><span>$${toNum(expensesTotal).toFixed(2)}</span></div>
                     <div class="flex justify-between font-bold text-2xl pt-2"><span class="font-bold">TOTAL:</span><span>$${toNum(grandTotal).toFixed(2)}</span></div>
                 </div>
@@ -313,43 +370,55 @@ const InvoiceViewModal: React.FC<{ invoice: Invoice | null, onClose: () => void,
     
     const defaultPerDiem = company?.defaultPerDiem || 0;
     const subtotal = invoice.items.reduce((sum, item) => sum + item.amount, 0);
-    const hst = subtotal * (invoice.hstRate || 0);
-    const perDiemsTotal = invoice.items.reduce((sum, item) => sum + (item.perDiemQuantity * defaultPerDiem), 0);
+
+    // Calculate PD Total converting USD to CAD if needed
+    const perDiemsTotal = invoice.items.reduce((sum, item) => {
+        const rate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+        return sum + (item.perDiemQuantity * defaultPerDiem * rate);
+    }, 0);
+
+    const hst = (subtotal + perDiemsTotal) * (invoice.hstRate || 0);
+
     const expensesTotal = attachedExpenses.reduce((sum, exp) => sum + exp.cadAmount, 0);
     const grandTotal = subtotal + hst + perDiemsTotal + expensesTotal;
 
     return (
-        <Modal isOpen={!!invoice} onClose={onClose} title={`Invoice #${String(invoice.invoiceNumber).padStart(3, '0')}`} maxWidth="max-w-5xl">
+        <Modal isOpen={!!invoice} onClose={onClose} title={`INVOICE #${String(invoice.invoiceNumber).padStart(3, '0')}`} maxWidth="max-w-5xl">
             <div className="space-y-6">
                 <div className="flex justify-between items-start">
-                    <div>
-                        <p className="font-bold text-fuchsia-500">Billed To:</p>
+                    <div className="bg-blue-500 p-4 border-2 border-black -rotate-1 shadow-sm text-black">
+                        <p className="font-comic-title text-xl mb-2">BILLED TO:</p>
                         <p className="text-xl font-bold">{company?.name}</p>
                         <p className="whitespace-pre-line">{company?.address}</p>
                     </div>
                     <div className="text-right">
-                        <p><span className="font-bold text-fuchsia-500">Date:</span> {invoice.date}</p>
-                        <p><span className="font-bold text-fuchsia-500">Status:</span> {invoice.status}</p>
+                        <p><span className="font-bold text-blue-400">Date:</span> {invoice.date}</p>
+                        <p><span className="font-bold text-blue-400">Status:</span> <span className="uppercase font-bold">{invoice.status}</span></p>
                     </div>
                 </div>
 
                 <div>
-                    <h3 className="text-fuchsia-500 font-bold mb-2 border-b-2 border-fuchsia-700 pb-1">Line Items</h3>
+                    <h3 className="font-comic-title text-2xl text-white mb-2 border-b-2 border-black pb-1">Line Items</h3>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm min-w-[600px]">
+                      <table className="w-full text-left text-sm min-w-[600px] text-white">
                           <thead>
-                              <tr className="border-b border-fuchsia-700">
-                                  <th className="p-1">Dates</th><th className="p-1">Description</th><th className="p-1">Qty</th><th className="p-1">Rate</th><th className="p-1">PD Qty</th><th className="p-1 text-right">PD Amt</th><th className="p-1 text-right">Total</th><th className="p-1">Approver</th>
+                              <tr className="border-b-2 border-black bg-gray-700">
+                                  <th className="p-2 font-bold uppercase">Dates</th><th className="p-2 font-bold uppercase">Description</th><th className="p-2 font-bold uppercase">Qty</th><th className="p-2 font-bold uppercase">Rate</th><th className="p-2 font-bold uppercase">PD Qty</th><th className="p-2 font-bold uppercase text-right">PD Amt</th><th className="p-2 font-bold uppercase text-right">Total</th><th className="p-2 font-bold uppercase">Approver</th>
                               </tr>
                           </thead>
                           <tbody>
                               {invoice.items.map(item => {
-                                  const perDiemAmount = item.perDiemQuantity * defaultPerDiem;
-                                  const lineTotal = item.amount + perDiemAmount;
+                                  const currencyRate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+                                  const perDiemCadAmount = item.perDiemQuantity * defaultPerDiem * currencyRate;
+                                  const lineTotal = item.amount + perDiemCadAmount;
                                   const dateDisplay = item.endDate ? `${item.startDate} to ${item.endDate}` : item.startDate;
+                                  const pdDisplay = item.perDiemQuantity > 0 
+                                    ? `$${(item.perDiemQuantity * defaultPerDiem).toFixed(2)} ${item.perDiemCurrency}` 
+                                    : '-';
+
                                   return (
-                                  <tr key={item.id} className="border-b border-green-800">
-                                      <td className="p-1">{dateDisplay}</td><td className="p-1">{item.description}</td><td className="p-1">{item.quantity} {item.unit}</td><td className="p-1">$${item.rate.toFixed(2)}</td><td className="p-1">{item.perDiemQuantity}</td><td className="p-1 text-right">$${perDiemAmount.toFixed(2)}</td><td className="p-1 text-right font-bold">${lineTotal.toFixed(2)}</td><td className="p-1">{item.approver}</td>
+                                  <tr key={item.id} className="border-b border-gray-600">
+                                      <td className="p-2">{dateDisplay}</td><td className="p-2">{item.description}</td><td className="p-2">{item.quantity} {item.unit}</td><td className="p-2">${item.rate.toFixed(2)}</td><td className="p-2">{item.perDiemQuantity}</td><td className="p-2 text-right">{pdDisplay}</td><td className="p-2 text-right font-bold text-blue-400">${lineTotal.toFixed(2)}</td><td className="p-2">{item.approver}</td>
                                   </tr>
                               )})}
                           </tbody>
@@ -359,26 +428,26 @@ const InvoiceViewModal: React.FC<{ invoice: Invoice | null, onClose: () => void,
 
                 {attachedExpenses.length > 0 && (
                     <div>
-                        <h3 className="text-fuchsia-500 font-bold mb-2 border-b-2 border-fuchsia-700 pb-1">Attached Expenses</h3>
+                        <h3 className="font-comic-title text-2xl text-white mb-2 border-b-2 border-black pb-1">Attached Expenses</h3>
                         <div className="space-y-1">
-                            {attachedExpenses.map(exp => <p key={exp.id} className="text-sm flex justify-between"><span>{exp.date} - {exp.description}</span> <span>$${exp.cadAmount.toFixed(2)}</span></p>)}
+                            {attachedExpenses.map(exp => <p key={exp.id} className="text-sm flex justify-between border-b border-dashed border-gray-600 py-1"><span>{exp.date} - {exp.description}</span> <span>$${exp.cadAmount.toFixed(2)}</span></p>)}
                         </div>
                     </div>
                 )}
                 
                 <div className="flex justify-end">
-                    <div className="w-64 space-y-1 text-lg">
-                        <div className="flex justify-between"><span className="font-bold text-fuchsia-500">Subtotal:</span><span>$${subtotal.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span className="font-bold text-fuchsia-500">HST (13%):</span><span>$${hst.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span className="font-bold text-fuchsia-500">Per Diems:</span><span>$${perDiemsTotal.toFixed(2)}</span></div>
-                        <div className="flex justify-between border-b border-fuchsia-700 pb-1"><span className="font-bold text-fuchsia-500">Expenses:</span><span>$${expensesTotal.toFixed(2)}</span></div>
-                        <div className="flex justify-between font-bold text-xl pt-1"><span className="font-bold text-yellow-300">Total:</span><span className="text-yellow-300">$${grandTotal.toFixed(2)}</span></div>
+                    <div className="w-64 space-y-1 text-lg border-2 border-black p-4 bg-gray-700 shadow-[4px_4px_0_black]">
+                        <div className="flex justify-between"><span className="font-bold text-gray-300">Subtotal:</span><span>${subtotal.toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span className="font-bold text-gray-300">Per Diems (CAD):</span><span>${perDiemsTotal.toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span className="font-bold text-gray-300">HST ({(invoice.hstRate * 100).toFixed(0)}%):</span><span>${hst.toFixed(2)}</span></div>
+                        <div className="flex justify-between border-b-2 border-black pb-1"><span className="font-bold text-gray-300">Expenses:</span><span>${expensesTotal.toFixed(2)}</span></div>
+                        <div className="flex justify-between font-bold text-xl pt-1 text-green-400"><span className="font-comic-title">Total:</span><span>${grandTotal.toFixed(2)}</span></div>
                     </div>
                 </div>
 
-                {invoice.notes && <div><p className="font-bold text-fuchsia-500">Notes:</p><p className="text-sm italic">{invoice.notes}</p></div>}
+                {invoice.notes && <div><p className="font-bold text-blue-400">Notes:</p><p className="text-sm italic text-gray-300">{invoice.notes}</p></div>}
 
-                <div className="flex justify-end gap-4 pt-4">
+                <div className="flex justify-end gap-4 pt-4 border-t-2 border-black">
                     <Button variant="secondary" onClick={onClose}>Close</Button>
                     <Button onClick={onPrint}>Download PDF</Button>
                 </div>
@@ -437,6 +506,7 @@ const ImportInvoiceModal: React.FC<{
                     amount: item.amount,
                     approver: '',
                     perDiemQuantity: 0, 
+                    perDiemCurrency: 'CAD' as const,
                     id: '',
                 }));
 
@@ -482,12 +552,12 @@ const ImportInvoiceModal: React.FC<{
         <Modal isOpen={isOpen} onClose={onClose} title="Import Invoice">
             <div className="space-y-4">
                 <p>Select a PDF or image file of an invoice to automatically import its data.</p>
-                <div>
+                <div className="border-2 border-black border-dashed p-6 text-center bg-gray-700">
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf,image/*" className="text-sm text-white" />
-                    {fileName && <p className="text-xs mt-1 text-gray-400">Selected: {fileName}</p>}
+                    {fileName && <p className="text-xs mt-1 text-gray-400 font-bold">Selected: {fileName}</p>}
                 </div>
-                {isProcessing && <p className="text-yellow-300 animate-pulse">Processing with AI... This may take a moment.</p>}
-                <div className="flex justify-end gap-4 pt-4">
+                {isProcessing && <p className="text-cyan-400 font-bold animate-pulse text-center">Processing with AI... This may take a moment.</p>}
+                <div className="flex justify-end gap-4 pt-4 border-t-2 border-black">
                     <Button variant="secondary" onClick={onClose} disabled={isProcessing}>Cancel</Button>
                     <Button onClick={handleImport} disabled={isProcessing}>{isProcessing ? 'Importing...' : 'Import'}</Button>
                 </div>
@@ -579,56 +649,62 @@ const InvoicesTab: React.FC = () => {
     return (
         <div>
             <div className="flex flex-wrap justify-between items-center gap-y-4 mb-6">
-                <h2 className="font-press-start text-xl sm:text-2xl text-yellow-700">INVOICES</h2>
+                <h2 className="text-3xl sm:text-4xl transform -rotate-1 relative">
+                    <span className="bg-blue-500 text-black px-2 border-2 border-black shadow-[4px_4px_0_black]">INVOICES</span>
+                </h2>
                 <div className="flex flex-wrap gap-2 justify-end">
-                    <Button variant="secondary" onClick={() => setIsImportModalOpen(true)} className="text-xs !px-3 !py-2">Import</Button>
-                    <Button onClick={openNewModal} className="text-xs !px-3 !py-2">+ New Invoice</Button>
+                    <Button variant="secondary" onClick={() => setIsImportModalOpen(true)} className="text-sm !px-4 !py-2">Import</Button>
+                    <Button onClick={openNewModal} className="text-sm !px-4 !py-2 !bg-blue-500 !text-black hover:!bg-blue-400">+ New Invoice</Button>
                 </div>
             </div>
 
-            <div className="bg-black border-2 border-green-500 pixel-corners">
+            <div className="bg-gray-700 border-[3px] border-black comic-shadow p-2 sm:p-4">
                 {invoices.length === 0 ? (
-                    <p className="p-4 text-center text-gray-400">No invoices yet. Create one to get started!</p>
+                    <p className="p-8 text-center text-gray-400 font-bold text-xl italic">No invoices yet. Time to get paid!</p>
                 ) : (
                     <>
                         {/* Mobile View */}
-                        <div className="md:hidden">
+                        <div className="md:hidden space-y-4">
                             {invoices.map(invoice => {
                                 const company = getCompany(invoice.companyId);
                                 const attachedExpenses = expenses.filter(exp => invoice.attachedExpenseIds.includes(exp.id));
                                 
                                 const subtotal = invoice.items.reduce((sum, item) => sum + toNum(item.amount), 0);
-                                const hst = subtotal * toNum(invoice.hstRate);
-                                const perDiemsTotal = invoice.items.reduce((sum, item) => sum + (toNum(item.perDiemQuantity) * toNum(company?.defaultPerDiem)), 0);
+                                const perDiemsTotal = invoice.items.reduce((sum, item) => {
+                                    const rate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+                                    return sum + (toNum(item.perDiemQuantity) * toNum(company?.defaultPerDiem) * rate);
+                                }, 0);
+                                const hst = (subtotal + perDiemsTotal) * toNum(invoice.hstRate);
                                 const expensesTotal = attachedExpenses.reduce((sum, exp) => sum + toNum(exp.cadAmount), 0);
                                 const grandTotal = subtotal + hst + perDiemsTotal + expensesTotal;
                                 
-                                const statusColor = { Draft: 'bg-gray-600', Sent: 'bg-fuchsia-700', Paid: 'bg-green-600' };
+                                const statusColor = { Draft: 'bg-gray-600 text-gray-200', Sent: 'bg-blue-800 text-white', Paid: 'bg-green-800 text-white' };
                                 
                                 return (
-                                    <div key={invoice.id} className="p-3 border-b-2 border-green-800 last:border-b-0 space-y-2">
-                                        <div className="flex justify-between items-start gap-2">
-                                            <div>
-                                                <p className="font-bold">#{String(invoice.invoiceNumber).padStart(3, '0')} - {company?.name || 'N/A'}</p>
-                                                <p className="text-sm text-gray-400">{invoice.date}</p>
-                                            </div>
-                                            <p className="font-bold text-lg text-yellow-400 whitespace-nowrap">$ {grandTotal.toFixed(2)}</p>
+                                    <div key={invoice.id} className="p-4 border-2 border-black bg-gray-800 relative">
+                                        <div className="absolute top-2 right-2 text-xs font-bold bg-white text-black border border-black px-1">
+                                            #{String(invoice.invoiceNumber).padStart(3, '0')}
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                             <select 
+                                        <div className="mb-2">
+                                            <p className="font-comic-title text-xl text-white">{company?.name || 'N/A'}</p>
+                                            <p className="text-sm text-gray-400 font-bold">{invoice.date}</p>
+                                        </div>
+                                        <div className="flex justify-between items-end mb-3">
+                                            <select 
                                                 value={invoice.status} 
                                                 onChange={(e) => handleStatusChange(invoice.id, e.target.value as Invoice['status'])}
-                                                className={`border-2 border-transparent text-white text-xs p-1 rounded focus:outline-none ${statusColor[invoice.status]}`}
+                                                className={`border-2 border-black text-xs p-1 font-bold focus:outline-none uppercase ${statusColor[invoice.status]}`}
                                             >
-                                                <option value="Draft" className="bg-gray-700">Draft</option>
-                                                <option value="Sent" className="bg-fuchsia-800">Sent</option>
-                                                <option value="Paid" className="bg-green-700">Paid</option>
+                                                <option value="Draft">Draft</option>
+                                                <option value="Sent">Sent</option>
+                                                <option value="Paid">Paid</option>
                                             </select>
-                                            <div className="flex gap-1 justify-end">
-                                                <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => openViewModal(invoice)}>View</Button>
-                                                <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => openEditModal(invoice)}>Edit</Button>
-                                                <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => printInvoice(invoice.id)}>DL</Button>
-                                            </div>
+                                            <p className="font-comic-title text-2xl text-red-400">$ {grandTotal.toFixed(2)}</p>
+                                        </div>
+                                        <div className="flex gap-1 justify-end border-t-2 border-gray-600 pt-2">
+                                            <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openViewModal(invoice)}>View</Button>
+                                            <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(invoice)}>Edit</Button>
+                                            <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => printInvoice(invoice.id)}>DL</Button>
                                         </div>
                                     </div>
                                 );
@@ -636,52 +712,57 @@ const InvoicesTab: React.FC = () => {
                         </div>
                         {/* Desktop View */}
                         <div className="hidden md:block overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead className="border-b-2 border-green-500 text-fuchsia-500 font-bold uppercase tracking-wider text-sm">
+                            <table className="w-full text-left border-collapse text-white">
+                                <thead className="bg-blue-500 text-black border-b-[3px] border-black font-comic-title text-lg tracking-wider">
                                     <tr>
-                                        <th className="p-3">#</th>
-                                        <th className="p-3">Company</th>
-                                        <th className="p-3">Date</th>
-                                        <th className="p-3">Total</th>
-                                        <th className="p-3">Status</th>
+                                        <th className="p-3 border-r-2 border-black">#</th>
+                                        <th className="p-3 border-r-2 border-black">Company</th>
+                                        <th className="p-3 border-r-2 border-black">Date</th>
+                                        <th className="p-3 border-r-2 border-black">Total</th>
+                                        <th className="p-3 border-r-2 border-black">Status</th>
                                         <th className="p-3 text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {invoices.map(invoice => {
+                                    {invoices.map((invoice, idx) => {
                                         const company = getCompany(invoice.companyId);
                                         const attachedExpenses = expenses.filter(exp => invoice.attachedExpenseIds.includes(exp.id));
                                         
                                         const subtotal = invoice.items.reduce((sum, item) => sum + toNum(item.amount), 0);
-                                        const hst = subtotal * toNum(invoice.hstRate);
-                                        const perDiemsTotal = invoice.items.reduce((sum, item) => sum + (toNum(item.perDiemQuantity) * toNum(company?.defaultPerDiem)), 0);
+                                        const perDiemsTotal = invoice.items.reduce((sum, item) => {
+                                            const rate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+                                            return sum + (toNum(item.perDiemQuantity) * toNum(company?.defaultPerDiem) * rate);
+                                        }, 0);
+                                        const hst = (subtotal + perDiemsTotal) * toNum(invoice.hstRate);
                                         const expensesTotal = attachedExpenses.reduce((sum, exp) => sum + toNum(exp.cadAmount), 0);
                                         const grandTotal = subtotal + hst + perDiemsTotal + expensesTotal;
                                         
-                                        const statusColor = { Draft: 'bg-gray-600', Sent: 'bg-fuchsia-700', Paid: 'bg-green-600' };
+                                        const statusColor = { Draft: 'bg-gray-600', Sent: 'bg-blue-600', Paid: 'bg-green-600' };
                                         
                                         return (
-                                            <tr key={invoice.id} className="border-b border-green-800 hover:bg-gray-900">
-                                                <td className="p-3">{String(invoice.invoiceNumber).padStart(3, '0')}</td>
-                                                <td className="p-3">{company?.name || 'N/A'}</td>
-                                                <td className="p-3">{invoice.date}</td>
-                                                <td className="p-3">$${grandTotal.toFixed(2)}</td>
-                                                <td className="p-3">
+                                            <tr key={invoice.id} className="border-b-2 border-black hover:bg-gray-600 transition-colors">
+                                                <td className="p-3 border-r-2 border-black font-bold">{String(invoice.invoiceNumber).padStart(3, '0')}</td>
+                                                <td className="p-3 border-r-2 border-black font-bold">{company?.name || 'N/A'}</td>
+                                                <td className="p-3 border-r-2 border-black">{invoice.date}</td>
+                                                <td className="p-3 border-r-2 border-black font-comic-title text-lg text-white">
+                                                    ${grandTotal.toFixed(2)}
+                                                </td>
+                                                <td className="p-3 border-r-2 border-black">
                                                     <select 
                                                         value={invoice.status} 
                                                         onChange={(e) => handleStatusChange(invoice.id, e.target.value as Invoice['status'])}
-                                                        className={`border-2 border-transparent text-white text-sm p-1 rounded focus:outline-none ${statusColor[invoice.status]}`}
+                                                        className={`border-2 border-black text-white font-bold text-sm p-1 focus:outline-none uppercase ${statusColor[invoice.status]}`}
                                                     >
-                                                        <option value="Draft" className="bg-gray-700">Draft</option>
-                                                        <option value="Sent" className="bg-fuchsia-800">Sent</option>
-                                                        <option value="Paid" className="bg-green-700">Paid</option>
+                                                        <option value="Draft">Draft</option>
+                                                        <option value="Sent">Sent</option>
+                                                        <option value="Paid">Paid</option>
                                                     </select>
                                                 </td>
                                                 <td className="p-3 text-right">
                                                     <div className="flex gap-2 justify-end">
-                                                        <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => openViewModal(invoice)}>View</Button>
-                                                        <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => openEditModal(invoice)}>Edit</Button>
-                                                        <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => printInvoice(invoice.id)}>Download</Button>
+                                                        <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openViewModal(invoice)}>View</Button>
+                                                        <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(invoice)}>Edit</Button>
+                                                        <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => printInvoice(invoice.id)}>DL</Button>
                                                     </div>
                                                 </td>
                                             </tr>

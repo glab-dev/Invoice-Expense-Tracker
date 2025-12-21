@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Button from '../components/Button';
@@ -6,6 +5,9 @@ import Modal from '../components/Modal';
 import { Expense } from '../types';
 import { extractReceiptData } from '../services/geminiService';
 import { convertToCAD } from '../services/currencyService';
+
+const inputClass = "w-full bg-gray-700 text-white border-2 border-black p-2 font-bold focus:outline-none focus:shadow-[4px_4px_0_rgba(255,255,255,0.2)] transition-shadow placeholder-gray-400";
+const labelClass = "block text-white font-bold mb-1 uppercase tracking-wide text-sm";
 
 const printDocument = (content: string, title: string) => {
     const printWindow = window.open('', '_blank');
@@ -19,7 +21,7 @@ const printDocument = (content: string, title: string) => {
                     .printable-box { max-width: 800px; margin: auto; padding: 30px; font-size: 14px; line-height: 20px; color: #333; }
                     @media print {
                       .printable-box { box-shadow: none; border: 0; padding: 0; margin: 0; max-width: 100%; font-size: 12px; }
-                      .receipt-image { max-height: 100px !important; display: block !important; border: 1px solid #eee; margin-top: 5px; }
+                      .avoid-break { break-inside: avoid; }
                     }
                 </style>
             </head>
@@ -105,49 +107,55 @@ const ExpenseForm: React.FC<{ expense?: Expense | null, onSave: (expense: Omit<E
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 text-lg">
-      <div>
-          <label className="block text-green-500 font-bold mb-1">Receipt Image</label>
-          <input type="file" accept="image/*" onChange={handleFileChange} className="text-sm text-white" />
-          {isProcessing && <p className="text-yellow-300 animate-pulse mt-2">Processing...</p>}
+      <div className="bg-gray-700 p-4 border-2 border-black border-dashed">
+          <label className={labelClass}>Receipt (Image or PDF)</label>
+          <input type="file" accept="image/*,application/pdf" onChange={handleFileChange} className="text-sm text-gray-300" />
+          {isProcessing && <p className="text-cyan-400 font-bold animate-pulse mt-2">Processing...</p>}
       </div>
-       {formData.receiptUrl && <img src={formData.receiptUrl} alt="Receipt preview" className="max-h-40 object-contain my-2 border-2 border-green-500" />}
+       {formData.receiptUrl && (
+           formData.receiptUrl.startsWith('data:application/pdf') ? (
+               <div className="border-2 border-black bg-gray-200 p-4 text-black font-bold text-center my-2">PDF Document Selected</div>
+           ) : (
+               <img src={formData.receiptUrl} alt="Receipt preview" className="max-h-40 object-contain my-2 border-2 border-black shadow-md bg-gray-200 p-1" />
+           )
+       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-            <label className="block text-green-500 font-bold mb-1">Date</label>
-            <input type="date" name="date" value={formData.date} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+            <label className={labelClass}>Date</label>
+            <input type="date" name="date" value={formData.date} onChange={handleChange} className={inputClass} />
         </div>
          <div>
-            <label className="block text-green-500 font-bold mb-1">Description</label>
-            <input type="text" name="description" value={formData.description} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+            <label className={labelClass}>Description</label>
+            <input type="text" name="description" value={formData.description} onChange={handleChange} className={inputClass} />
         </div>
       </div>
       
        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-            <label className="block text-green-500 font-bold mb-1">Amount</label>
-            <input type="number" step="0.01" name="amount" value={formData.amount} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+            <label className={labelClass}>Amount</label>
+            <input type="number" step="0.01" name="amount" value={formData.amount} onChange={handleChange} className={inputClass} />
         </div>
         <div>
-            <label className="block text-green-500 font-bold mb-1">Currency</label>
-            <input type="text" name="currency" value={formData.currency} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+            <label className={labelClass}>Currency</label>
+            <input type="text" name="currency" value={formData.currency} onChange={handleChange} className={inputClass} />
         </div>
         <div>
-            <label className="block text-green-500 font-bold mb-1">Category</label>
-            <select name="category" value={formData.category} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400">
+            <label className={labelClass}>Category</label>
+            <select name="category" value={formData.category} onChange={handleChange} className={inputClass}>
                 {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
         </div>
        </div>
 
-        <div>
-            <label className="flex items-center space-x-2 text-green-500 font-bold">
-                <input type="checkbox" name="isBillable" checked={formData.isBillable} onChange={handleChange} className="w-5 h-5" />
-                <span>Billable to Client</span>
+        <div className="p-2 border-2 border-transparent hover:bg-yellow-900 transition-colors rounded">
+            <label className="flex items-center space-x-2 cursor-pointer">
+                <input type="checkbox" name="isBillable" checked={formData.isBillable} onChange={handleChange} className="w-5 h-5 accent-yellow-400" />
+                <span className="font-bold text-white uppercase">Billable to Client</span>
             </label>
         </div>
 
-      <div className="mt-6 flex justify-end gap-4">
+      <div className="mt-6 flex justify-end gap-4 border-t-2 border-black pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={isProcessing}>{isProcessing ? 'Saving...' : expense ? 'Update Expense' : 'Save Expense'}</Button>
       </div>
@@ -161,14 +169,22 @@ const ExpenseViewModal: React.FC<{ expense: Expense | null, onClose: () => void 
     return (
         <Modal isOpen={!!expense} onClose={onClose} title="View Expense">
             <div className="space-y-4">
-                {expense.receiptUrl && <img src={expense.receiptUrl} alt="Receipt" className="w-full max-w-md mx-auto object-contain border-2 border-green-500" />}
-                <div className="text-lg">
-                    <p><span className="font-bold text-fuchsia-500">Description:</span> {expense.description}</p>
-                    <p><span className="font-bold text-fuchsia-500">Date:</span> {expense.date}</p>
-                    <p><span className="font-bold text-fuchsia-500">Amount:</span> {expense.amount.toFixed(2)} {expense.currency} (${expense.cadAmount.toFixed(2)} CAD)</p>
-                    <p><span className="font-bold text-fuchsia-500">Category:</span> {expense.category}</p>
-                    <p><span className="font-bold text-fuchsia-500">Billable:</span> {expense.isBillable ? 'Yes' : 'No'}</p>
-                    {expense.billedToInvoiceId && <p><span className="font-bold text-fuchsia-500">Billed to Invoice:</span> Yes</p>}
+                {expense.receiptUrl && (
+                    expense.receiptUrl.startsWith('data:application/pdf') ? (
+                        <div className="w-full max-w-md mx-auto border-2 border-black shadow-[4px_4px_0_black] bg-white h-64 flex items-center justify-center">
+                            <iframe src={expense.receiptUrl} className="w-full h-full" title="Receipt PDF"></iframe>
+                        </div>
+                    ) : (
+                        <img src={expense.receiptUrl} alt="Receipt" className="w-full max-w-md mx-auto object-contain border-2 border-black shadow-[4px_4px_0_black]" />
+                    )
+                )}
+                <div className="text-lg bg-gray-700 p-4 border-2 border-black">
+                    <p className="border-b border-gray-600 pb-1 mb-1"><span className="font-bold text-cyan-400 uppercase">Description:</span> {expense.description}</p>
+                    <p className="border-b border-gray-600 pb-1 mb-1"><span className="font-bold text-cyan-400 uppercase">Date:</span> {expense.date}</p>
+                    <p className="border-b border-gray-600 pb-1 mb-1"><span className="font-bold text-cyan-400 uppercase">Amount:</span> {expense.amount.toFixed(2)} {expense.currency} (${expense.cadAmount.toFixed(2)} CAD)</p>
+                    <p className="border-b border-gray-600 pb-1 mb-1"><span className="font-bold text-cyan-400 uppercase">Category:</span> {expense.category}</p>
+                    <p><span className="font-bold text-cyan-400 uppercase">Billable:</span> {expense.isBillable ? 'Yes' : 'No'}</p>
+                    {expense.billedToInvoiceId && <p className="mt-2 text-green-400 font-bold"><span className="uppercase">Billed to Invoice:</span> Yes</p>}
                 </div>
                 <div className="flex justify-end pt-4">
                     <Button variant="secondary" onClick={onClose}>Close</Button>
@@ -188,9 +204,9 @@ const ExportOptionsModal: React.FC<{
             <div className="space-y-4 text-center">
                 <p>Which expenses would you like to export to PDF?</p>
                 <div className="flex justify-center gap-4 pt-4">
-                    <Button onClick={() => onExport('billable')}>Billable Only</Button>
+                    <Button onClick={() => onExport('billable')}>Billable</Button>
                     <Button onClick={() => onExport('non-billable')}>Non-Billable</Button>
-                    <Button variant="secondary" onClick={() => onExport('all')}>All Expenses</Button>
+                    <Button variant="secondary" onClick={() => onExport('all')}>All</Button>
                 </div>
             </div>
         </Modal>
@@ -234,7 +250,6 @@ const ExpensesTab: React.FC = () => {
           filteredExpenses = expenses.filter(e => !e.isBillable);
       }
       
-      // FIX: Correctly type the initial value for `reduce` to ensure `grouped` is properly typed as Record<string, Expense[]>. This prevents a downstream error where `.map` is called on a value of type `unknown`.
       const grouped = filteredExpenses.reduce((acc, exp) => {
           const category = exp.category;
           if (!acc[category]) {
@@ -248,24 +263,35 @@ const ExpensesTab: React.FC = () => {
 
       const content = `
           <h1 class="text-3xl font-bold mb-6">Expense Report (${type})</h1>
-          ${Object.entries(grouped).map(([category, exps]) => `
-              <div class="mb-6">
-                  <h2 class="text-xl font-bold border-b-2 border-black pb-2 mb-2">${category}</h2>
+          ${Object.entries(grouped).map(([category, exps]: [string, Expense[]]) => {
+              const categoryTotal = exps.reduce((sum, e) => sum + e.cadAmount, 0);
+              return `
+              <div class="mb-6 avoid-break">
+                  <div class="flex justify-between items-end border-b-2 border-black pb-1 mb-2">
+                      <h2 class="text-xl font-bold uppercase">${category}</h2>
+                      <span class="font-bold text-lg">$${categoryTotal.toFixed(2)} CAD</span>
+                  </div>
                   ${exps.map(exp => `
-                      <div class="flex justify-between items-start py-2 border-b">
-                          <div>
-                              <p><strong>${exp.description}</strong></p>
-                              <p class="text-sm text-gray-600">${exp.date}</p>
-                              <p class="text-sm">${exp.amount.toFixed(2)} ${exp.currency}</p>
+                      <div class="flex items-center justify-between py-2 border-b border-gray-200 text-sm">
+                          <div class="flex items-center gap-4 flex-1">
+                              <span class="font-mono text-gray-600 whitespace-nowrap">${exp.date}</span>
+                              <span class="font-bold truncate pr-4">${exp.description}</span>
                           </div>
-                          <div class="text-right">
-                              <p class="font-bold text-lg">$${exp.cadAmount.toFixed(2)} CAD</p>
-                              ${exp.receiptUrl ? `<img src="${exp.receiptUrl}" alt="receipt" class="receipt-image max-h-24 w-auto ml-auto hidden" />` : ''}
+                          <div class="flex items-center gap-4 whitespace-nowrap">
+                              ${exp.currency !== 'CAD' ? `<span class="text-gray-500 text-xs">${exp.amount.toFixed(2)} ${exp.currency}</span>` : ''}
+                              <span class="font-bold w-24 text-right">$${exp.cadAmount.toFixed(2)} CAD</span>
+                              <div class="w-6 flex justify-center">
+                                  ${exp.receiptUrl ? (
+                                      exp.receiptUrl.startsWith('data:application/pdf') ? 
+                                      '<span class="text-[10px] border border-gray-400 px-1 rounded text-gray-500">PDF</span>' :
+                                      `<img src="${exp.receiptUrl}" class="h-6 w-auto object-contain border border-gray-200" />`
+                                  ) : ''}
+                              </div>
                           </div>
                       </div>
                   `).join('')}
               </div>
-          `).join('')}
+          `}).join('')}
           <div class="flex justify-end mt-8">
               <div class="w-60 text-right">
                   <div class="flex justify-between font-bold text-2xl border-t-2 border-black pt-2 mt-2">
@@ -289,7 +315,6 @@ const ExpensesTab: React.FC = () => {
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // FIX: Correctly type the initial value for `reduce` to ensure `groupedExpenses` is properly typed as Record<string, Expense[]>.
   const groupedExpenses = filteredExpenses.reduce((acc, expense) => {
       const category = expense.category;
       if (!acc[category]) {
@@ -304,48 +329,50 @@ const ExpensesTab: React.FC = () => {
   return (
     <div>
       <div className="flex flex-wrap justify-between items-center gap-y-4 mb-6">
-        <h2 className="font-press-start text-xl sm:text-2xl text-yellow-700">EXPENSES</h2>
+         <h2 className="text-3xl sm:text-4xl transform -rotate-1 relative">
+            <span className="bg-red-600 text-black px-2 border-2 border-black shadow-[4px_4px_0_black]">EXPENSES</span>
+        </h2>
         <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
             <div className="flex items-center">
-                <label htmlFor="billable-filter" className="font-bold uppercase tracking-wider text-xs text-green-500 mr-2">BILLABLE:</label>
+                <label htmlFor="billable-filter" className="font-bold uppercase tracking-wider text-xs mr-2 bg-red-600 text-black px-1 border border-black">Filter:</label>
                 <select
                     id="billable-filter"
                     value={billableFilter}
                     onChange={(e) => setBillableFilter(e.target.value as 'all' | 'yes' | 'no')}
-                    className="bg-black text-white border-2 border-green-500 font-bold uppercase text-xs p-1 sm:p-2 pixel-corners focus:outline-none focus:border-yellow-400"
+                    className="bg-gray-700 text-white border-2 border-black font-bold uppercase text-xs p-1 sm:p-2 focus:outline-none focus:shadow-[2px_2px_0_white]"
                 >
                     <option value="all">All</option>
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
+                    <option value="yes">Billable</option>
+                    <option value="no">Non-Billable</option>
                 </select>
             </div>
-            <Button variant="secondary" onClick={() => setIsExportModalOpen(true)} className="text-xs !px-3 !py-2">Export</Button>
-            <Button onClick={openNewModal} className="text-xs !px-3 !py-2">+ Add Expense</Button>
+            <Button variant="secondary" onClick={() => setIsExportModalOpen(true)} className="text-sm !px-4 !py-2">Export</Button>
+            <Button onClick={openNewModal} className="text-sm !px-4 !py-2">+ Add Expense</Button>
         </div>
       </div>
 
-      <div className="bg-black border-2 border-green-500 pixel-corners">
+      <div className="bg-gray-700 border-[3px] border-black comic-shadow p-2">
         {/* Mobile View */}
-        <div className="md:hidden">
+        <div className="md:hidden space-y-4">
           {sortedCategories.length > 0 ? (
             sortedCategories.map(category => (
-              <div key={category}>
-                <div className="p-2 text-fuchsia-500 font-press-start text-base border-y-2 border-green-500 font-bold bg-black/50">
+              <div key={category} className="border-2 border-black">
+                <div className="p-2 text-black bg-red-600 border-b-2 border-black font-bold uppercase tracking-wider">
                   {category}
                 </div>
                 {groupedExpenses[category].map(expense => (
-                  <div key={expense.id} className="p-3 border-b border-green-800 last:border-b-0 space-y-2">
+                  <div key={expense.id} className="p-3 border-b border-black last:border-b-0 space-y-2 bg-gray-800">
                     <div className="flex justify-between items-start gap-2">
                       <div>
-                        <p className="font-bold">{expense.description}</p>
-                        <p className="text-xs text-gray-400">{expense.date}</p>
+                        <p className="font-bold text-lg leading-tight text-white">{expense.description}</p>
+                        <p className="text-xs text-gray-400 font-bold">{expense.date}</p>
                       </div>
-                      <p className="font-bold text-lg text-yellow-400 whitespace-nowrap">$ {expense.cadAmount.toFixed(2)}</p>
+                      <p className="font-comic-title text-xl text-white whitespace-nowrap">$ {expense.cadAmount.toFixed(2)}</p>
                     </div>
                     <div className="flex justify-end">
                       <div className="flex gap-2">
-                        <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => setViewingExpense(expense)}>View</Button>
-                        <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => openEditModal(expense)}>Edit</Button>
+                        <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => setViewingExpense(expense)}>View</Button>
+                        <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(expense)}>Edit</Button>
                       </div>
                     </div>
                   </div>
@@ -353,18 +380,18 @@ const ExpensesTab: React.FC = () => {
               </div>
             ))
           ) : (
-            <p className="p-4 text-center text-gray-400">No expenses found for this filter.</p>
+            <p className="p-4 text-center text-gray-400 italic">No expenses found for this filter.</p>
           )}
         </div>
 
         {/* Desktop View */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="border-b-2 border-green-500 text-fuchsia-500 font-bold uppercase tracking-wider text-sm">
+          <table className="w-full text-left text-white">
+            <thead className="border-b-[3px] border-black bg-gray-800 text-white font-comic-title text-lg uppercase tracking-wider">
               <tr>
-                <th className="p-3">Date</th>
-                <th className="p-3">Description</th>
-                <th className="p-3">Amount (CAD)</th>
+                <th className="p-3 border-r-2 border-black">Date</th>
+                <th className="p-3 border-r-2 border-black">Description</th>
+                <th className="p-3 border-r-2 border-black">Amount (CAD)</th>
                 <th className="p-3">Actions</th>
               </tr>
             </thead>
@@ -372,19 +399,19 @@ const ExpensesTab: React.FC = () => {
               {sortedCategories.length > 0 ? (
                   sortedCategories.map(category => (
                       <React.Fragment key={category}>
-                      <tr className="bg-black/50">
-                          <td colSpan={4} className="p-2 text-fuchsia-500 font-press-start text-base border-y-2 border-green-500 font-bold">
+                      <tr>
+                          <td colSpan={4} className="p-2 text-black bg-red-600 border-y-2 border-black font-bold uppercase tracking-wider">
                           {category}
                           </td>
                       </tr>
                       {groupedExpenses[category].map(expense => (
-                          <tr key={expense.id} className="border-b border-green-800 hover:bg-gray-900">
-                          <td className="p-3">{expense.date}</td>
-                          <td className="p-3">{expense.description}</td>
-                          <td className="p-3">${expense.cadAmount.toFixed(2)}</td>
+                          <tr key={expense.id} className="border-b border-black hover:bg-gray-600 transition-colors">
+                          <td className="p-3 border-r-2 border-black font-bold text-gray-300">{expense.date}</td>
+                          <td className="p-3 border-r-2 border-black font-bold">{expense.description}</td>
+                          <td className="p-3 border-r-2 border-black font-comic-title text-white text-lg">${expense.cadAmount.toFixed(2)}</td>
                           <td className="p-3 flex gap-2">
-                              <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => setViewingExpense(expense)}>View</Button>
-                              <Button variant="secondary" className="text-xs !px-2 !py-1" onClick={() => openEditModal(expense)}>Edit</Button>
+                              <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => setViewingExpense(expense)}>View</Button>
+                              <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(expense)}>Edit</Button>
                           </td>
                           </tr>
                       ))}
@@ -392,7 +419,7 @@ const ExpensesTab: React.FC = () => {
                   ))
               ) : (
                   <tr>
-                      <td colSpan={4} className="p-4 text-center text-gray-400">No expenses found for this filter.</td>
+                      <td colSpan={4} className="p-8 text-center text-gray-400 italic">No expenses found for this filter.</td>
                   </tr>
               )}
             </tbody>

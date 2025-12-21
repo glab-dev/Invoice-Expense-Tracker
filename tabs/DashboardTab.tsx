@@ -1,18 +1,15 @@
-
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Company } from '../types';
+import { CURRENCY_RATES } from '../constants';
 
 const DashboardTab: React.FC = () => {
   const { invoices, expenses, companies } = useAppContext();
   const companyMap = new Map<string, Company>(companies.map(c => [c.id, c]));
 
-  // Filter for paid invoices to ensure dashboard reflects actual income
   const paidInvoices = invoices.filter(inv => inv.status === 'Paid');
-  const paidInvoiceIds = new Set(paidInvoices.map(inv => inv.id));
 
-  // Calculate totals based on PAID invoices only
   const totalIncomeSubtotal = paidInvoices.reduce((acc, inv) => {
     const subtotal = inv.items.reduce((sum, item) => sum + item.amount, 0);
     return acc + subtotal;
@@ -21,26 +18,33 @@ const DashboardTab: React.FC = () => {
   const totalPDsInvoiced = paidInvoices.reduce((acc, inv) => {
     const company = companyMap.get(inv.companyId);
     const defaultPerDiem = company?.defaultPerDiem || 0;
-    const invoicePDTotal = inv.items.reduce((sum, item) => sum + (item.perDiemQuantity * defaultPerDiem), 0);
+    const invoicePDTotal = inv.items.reduce((sum, item) => {
+        const rate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+        return sum + (item.perDiemQuantity * defaultPerDiem * rate);
+    }, 0);
     return acc + invoicePDTotal;
   }, 0);
 
   const totalHSTInvoiced = paidInvoices.reduce((acc, inv) => {
+    const company = companyMap.get(inv.companyId);
+    const defaultPerDiem = company?.defaultPerDiem || 0;
     const subtotal = inv.items.reduce((sum, item) => sum + item.amount, 0);
-    const invoiceHST = subtotal * (inv.hstRate || 0);
+    
+    const invoicePDTotal = inv.items.reduce((sum, item) => {
+        const rate = item.perDiemCurrency === 'USD' ? CURRENCY_RATES['USD'] : 1;
+        return sum + (item.perDiemQuantity * defaultPerDiem * rate);
+    }, 0);
+
+    const invoiceHST = (subtotal + invoicePDTotal) * (inv.hstRate || 0);
     return acc + invoiceHST;
   }, 0);
 
-  const totalExpensesBilled = expenses
-    .filter(exp => exp.billedToInvoiceId && paidInvoiceIds.has(exp.billedToInvoiceId))
-    .reduce((acc, exp) => acc + exp.cadAmount, 0);
+  // Filter out ANY expense that has been attached to an invoice ("billed"), regardless of invoice status.
+  // This leaves only "Pending" (unbilled) and "Non-Billable" expenses.
+  const expensesToDisplay = expenses.filter(exp => !exp.billedToInvoiceId);
 
-  // Unbilled expenses are independent of invoice status
-  const totalExpensesNotBilled = expenses
-    .filter(exp => exp.isBillable && !exp.billedToInvoiceId)
-    .reduce((acc, exp) => acc + exp.cadAmount, 0);
+  const totalExpenses = expensesToDisplay.reduce((acc, exp) => acc + exp.cadAmount, 0);
 
-  // Chart income should also be based on paid invoices
   const monthlyData = paidInvoices.reduce((acc, invoice) => {
     const month = new Date(invoice.date).toLocaleString('default', { month: 'short' });
     if (!acc[month]) {
@@ -51,8 +55,7 @@ const DashboardTab: React.FC = () => {
     return acc;
   }, {} as { [key: string]: { name: string, income: number, expenses: number } });
 
-  // Chart expenses can show all expenses incurred
-  expenses.forEach(expense => {
+  expensesToDisplay.forEach(expense => {
       const month = new Date(expense.date).toLocaleString('default', { month: 'short' });
       if (!monthlyData[month]) {
           monthlyData[month] = { name: month, income: 0, expenses: 0 };
@@ -62,57 +65,58 @@ const DashboardTab: React.FC = () => {
 
   const chartData = Object.values(monthlyData);
 
+  const StatCard = ({ title, value, sub, color, textColor }: { title: string, value: string, sub?: string, color: string, textColor: string }) => (
+    <div className={`bg-gray-700 p-4 border-[3px] border-black comic-shadow-sm relative overflow-hidden group`}>
+        <div className={`absolute top-0 right-0 w-16 h-16 ${color} transform translate-x-8 -translate-y-8 rotate-45 border-l-2 border-b-2 border-black`}></div>
+        <p className={`font-comic-title text-xl uppercase ${textColor}`}>{title}</p>
+        {sub && <p className="text-gray-400 text-xs font-bold mb-2">{sub}</p>}
+        <p className="text-3xl font-bold mt-1 text-white font-comic-title tracking-wider">{value}</p>
+    </div>
+  );
+
   return (
     <div>
-      <h2 className="font-press-start text-xl sm:text-2xl text-yellow-700 mb-6">DASHBOARD</h2>
+      <h2 className="text-4xl text-white mb-8 transform -rotate-1 relative inline-block">
+        <span className="bg-yellow-400 text-black px-2 shadow-[4px_4px_0_black] border-2 border-black">MISSION REPORT</span>
+      </h2>
       
-      <div className="bg-black p-2 sm:p-4 border-4 border-green-500 pixel-corners">
-        <div className="bg-blue-500 p-4 sm:p-6 mb-4 sm:mb-8 text-center">
-          <div className="border-2 border-blue-200 pixel-corners p-4 inline-block">
-            <p className="font-bold uppercase tracking-wider text-base sm:text-lg md:text-xl text-fuchsia-500 drop-shadow-[2px_2px_0_rgba(0,0,0,0.3)]">Total Income</p>
-            <p className="text-fuchsia-500 text-sm mb-2">(From Paid Invoices)</p>
-            <p className="text-3xl sm:text-4xl md:text-5xl mt-2 font-bold text-green-500 font-mono">${totalIncomeSubtotal.toFixed(2)}</p>
+      <div className="space-y-8">
+        <div className="bg-cyan-900 p-6 sm:p-8 border-[3px] border-black comic-shadow text-center relative">
+          <div className="bg-gray-800 border-[3px] border-black p-6 inline-block transform rotate-1 shadow-[4px_4px_0_rgba(0,0,0,0.5)]">
+            <p className="font-comic-title text-2xl text-white">Total Income</p>
+            <p className="text-gray-400 font-bold text-sm mb-2">(From Paid Invoices)</p>
+            <p className="text-5xl sm:text-6xl mt-2 font-bold text-green-400 font-comic-title drop-shadow-sm">${totalIncomeSubtotal.toFixed(2)}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 md:gap-6 mb-4 sm:mb-8 text-center">
-          <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners">
-            <p className="font-bold uppercase tracking-wider text-xs sm:text-sm md:text-base text-fuchsia-500">PDs Invoiced</p>
-            <p className="text-xl sm:text-2xl md:text-3xl text-green-500 mt-2 font-mono">${totalPDsInvoiced.toFixed(2)}</p>
-          </div>
-          <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners">
-            <p className="font-bold uppercase tracking-wider text-xs sm:text-sm md:text-base text-fuchsia-500">HST Invoiced</p>
-            <p className="text-xl sm:text-2xl md:text-3xl text-green-500 mt-2 font-mono">${totalHSTInvoiced.toFixed(2)}</p>
-          </div>
-          <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners">
-            <p className="font-bold uppercase tracking-wider text-xs sm:text-sm md:text-base text-fuchsia-500">Expenses Billed</p>
-            <p className="text-xl sm:text-2xl md:text-3xl text-green-500 mt-2 font-mono">${totalExpensesBilled.toFixed(2)}</p>
-          </div>
-          <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners">
-            <p className="font-bold uppercase tracking-wider text-xs sm:text-sm md:text-base text-fuchsia-500">Unbilled Expenses</p>
-            <p className="text-xl sm:text-2xl md:text-3xl text-green-500 mt-2 font-mono">${totalExpensesNotBilled.toFixed(2)}</p>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+          <StatCard title="PDs Invoiced" value={`$${totalPDsInvoiced.toFixed(2)}`} color="bg-yellow-400" textColor="text-yellow-400" />
+          <StatCard title="HST Invoiced" value={`$${totalHSTInvoiced.toFixed(2)}`} color="bg-purple-400" textColor="text-purple-400" />
+          <StatCard title="Expenses" value={`$${totalExpenses.toFixed(2)}`} color="bg-red-400" textColor="text-red-400" />
         </div>
 
-        <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners h-64 sm:h-80 md:h-96">
-          <h3 className="font-bold uppercase tracking-wider text-lg sm:text-xl text-fuchsia-500 mb-4">INCOME vs EXPENSE</h3>
+        <div className="bg-gray-700 p-4 sm:p-6 border-[3px] border-black comic-shadow h-80 sm:h-96">
+          <h3 className="font-comic-title text-2xl text-white mb-4">INCOME VS EXPENSES</h3>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00FF0033" />
-              <XAxis dataKey="name" stroke="#22c55e" style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', fontWeight: 'bold' }} />
-              <YAxis stroke="#22c55e" style={{ fontFamily: 'IBM Plex Mono', fontSize: '12px', fontWeight: 'bold' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
+              <XAxis dataKey="name" stroke="#e5e7eb" style={{ fontFamily: 'Comic Neue', fontSize: '14px', fontWeight: 'bold' }} />
+              <YAxis stroke="#e5e7eb" style={{ fontFamily: 'Comic Neue', fontSize: '14px', fontWeight: 'bold' }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#000',
-                  border: '2px solid #22c55e',
-                  fontFamily: 'IBM Plex Mono',
-                  fontSize: '14px',
+                  backgroundColor: '#1f2937',
+                  border: '2px solid #000',
+                  boxShadow: '4px 4px 0px 0px #000',
+                  fontFamily: 'Comic Neue',
+                  fontWeight: 'bold',
+                  color: '#fff'
                 }}
-                cursor={{ fill: 'rgba(59, 130, 246, 0.2)' }}
+                itemStyle={{ color: '#fff' }}
+                cursor={{ fill: 'rgba(253, 224, 71, 0.1)' }}
               />
-              <Legend wrapperStyle={{ fontFamily: 'IBM Plex Mono', fontSize: '14px', paddingTop: '20px' }} />
-              <Bar dataKey="income" fill="#3b82f6" name="Income" />
-              <Bar dataKey="expenses" fill="#ef4444" name="Expenses" />
+              <Legend wrapperStyle={{ fontFamily: 'Bangers', fontSize: '18px', paddingTop: '20px', color: '#fff' }} />
+              <Bar dataKey="income" fill="#3b82f6" name="Income" stroke="#000" strokeWidth={2} />
+              <Bar dataKey="expenses" fill="#ef4444" name="Expenses" stroke="#000" strokeWidth={2} />
             </BarChart>
           </ResponsiveContainer>
         </div>

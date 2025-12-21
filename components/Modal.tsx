@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ModalProps {
@@ -13,11 +12,16 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidt
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className={`bg-black border-4 border-green-500 pixel-corners w-full ${maxWidth} text-green-500 shadow-lg animate-fade-in`}>
-        <header className="p-4 border-b-4 border-green-500 flex justify-between items-center">
-          <h2 className="font-press-start text-lg text-yellow-400">{title}</h2>
-          <button onClick={onClose} className="font-press-start text-2xl text-green-500 hover:text-yellow-400">&times;</button>
+    <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className={`bg-gray-800 border-[3px] border-black comic-shadow w-full ${maxWidth} text-white animate-fade-in relative`}>
+        <header className="p-4 border-b-[3px] border-black flex justify-between items-center bg-yellow-400">
+          <h2 className="text-2xl sm:text-3xl text-black transform rotate-1">{title}</h2>
+          <button 
+            onClick={onClose} 
+            className="font-comic-title text-2xl text-black hover:text-red-600 border-2 border-black bg-white w-8 h-8 flex items-center justify-center rounded-full hover:scale-110 transition-transform"
+          >
+            &times;
+          </button>
         </header>
         <div className="p-6 max-h-[70vh] overflow-y-auto">
           {children}

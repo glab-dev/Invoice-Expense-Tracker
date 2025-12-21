@@ -1,9 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import { Company, UserProfile } from '../types';
+
+const inputClass = "w-full bg-gray-700 text-white border-2 border-black p-2 font-bold focus:outline-none focus:shadow-[4px_4px_0_rgba(255,255,255,0.2)] transition-shadow placeholder-gray-400";
+const labelClass = "block text-white font-bold mb-1 uppercase tracking-wide text-sm";
 
 const CompanyForm: React.FC<{ company: Company | null, onSave: (companyData: Omit<Company, 'id'>) => void, onCancel: () => void }> = ({ company, onSave, onCancel }) => {
     const [formData, setFormData] = useState({
@@ -39,24 +41,24 @@ const CompanyForm: React.FC<{ company: Company | null, onSave: (companyData: Omi
     return (
         <form onSubmit={handleSubmit} className="space-y-4 text-lg">
             <div>
-                <label className="block text-yellow-700 font-bold mb-1">Company Name</label>
-                <input type="text" name="name" value={formData.name} onChange={handleChange} required className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+                <label className={labelClass}>Company Name</label>
+                <input type="text" name="name" value={formData.name} onChange={handleChange} required className={inputClass} />
             </div>
             <div>
-                <label className="block text-yellow-700 font-bold mb-1">Billing Address</label>
-                <textarea name="address" value={formData.address} onChange={handleChange} rows={3} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400 text-base" />
+                <label className={labelClass}>Billing Address</label>
+                <textarea name="address" value={formData.address} onChange={handleChange} rows={3} className={inputClass} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-yellow-700 font-bold mb-1">Default Rate ($)</label>
-                    <input type="number" name="defaultRate" value={formData.defaultRate} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+                    <label className={labelClass}>Default Rate ($)</label>
+                    <input type="number" name="defaultRate" value={formData.defaultRate} onChange={handleChange} className={inputClass} />
                 </div>
                 <div>
-                    <label className="block text-yellow-700 font-bold mb-1">Default Per Diem ($)</label>
-                    <input type="number" name="defaultPerDiem" value={formData.defaultPerDiem} onChange={handleChange} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+                    <label className={labelClass}>Default Per Diem ($)</label>
+                    <input type="number" name="defaultPerDiem" value={formData.defaultPerDiem} onChange={handleChange} className={inputClass} />
                 </div>
             </div>
-            <div className="mt-6 flex justify-end gap-4">
+            <div className="mt-6 flex justify-end gap-4 pt-4 border-t-2 border-black">
                 <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
                 <Button type="submit">Save Company</Button>
             </div>
@@ -77,10 +79,10 @@ const CategoryForm: React.FC<{ category?: string, onSave: (oldName: string | und
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
              <div>
-                <label className="block text-yellow-700 font-bold mb-1">Category Name</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} required className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+                <label className={labelClass}>Category Name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} required className={inputClass} />
             </div>
-             <div className="mt-6 flex justify-end gap-4">
+             <div className="mt-6 flex justify-end gap-4 pt-4 border-t-2 border-black">
                 <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
                 <Button type="submit">Save</Button>
             </div>
@@ -112,16 +114,16 @@ const UserProfileForm: React.FC = () => {
     return (
         <form onSubmit={handleSubmit} className="space-y-4 text-lg">
             <div>
-                <label className="block text-yellow-700 font-bold mb-1">Your Name</label>
-                <input type="text" name="name" value={formData.name} onChange={handleChange} required className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400" />
+                <label className={labelClass}>Your Name</label>
+                <input type="text" name="name" value={formData.name} onChange={handleChange} required className={inputClass} />
             </div>
             <div>
-                <label className="block text-yellow-700 font-bold mb-1">Your Address</label>
-                <textarea name="address" value={formData.address} onChange={handleChange} rows={3} className="w-full bg-black text-white border-2 border-green-500 p-2 focus:outline-none focus:border-yellow-400 text-base" />
+                <label className={labelClass}>Your Address</label>
+                <textarea name="address" value={formData.address} onChange={handleChange} rows={3} className={inputClass} />
             </div>
-            <div className="flex justify-end items-center gap-4">
-                {isSaved && <p className="text-yellow-300 text-sm animate-pulse">Saved!</p>}
-                <Button type="submit">Save Info</Button>
+            <div className="flex justify-end items-center gap-4 pt-2">
+                {isSaved && <div className="bg-yellow-400 text-black px-2 py-1 border-2 border-black font-bold transform -rotate-2">Saved!</div>}
+                <Button type="submit" className="!bg-green-400 hover:!bg-green-300 !text-black">Save Info</Button>
             </div>
         </form>
     );
@@ -167,57 +169,61 @@ const SettingsTab: React.FC = () => {
 
     return (
         <div>
-            <h2 className="font-press-start text-xl sm:text-2xl text-yellow-700 mb-6">SETTINGS</h2>
+            <h2 className="text-3xl sm:text-4xl transform -rotate-1 relative mb-6">
+                <span className="bg-green-400 text-black px-2 border-2 border-black shadow-[4px_4px_0_black]">SETTINGS</span>
+            </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
-                <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners md:col-span-2">
-                    <h3 className="font-press-start text-lg sm:text-xl text-fuchsia-500 mb-2 sm:mb-4">Google Drive Sync</h3>
-                    <p className="mb-4 text-sm">Link folders for automated expense tracking.</p>
+                <div className="bg-gray-700 p-4 border-[3px] border-black comic-shadow md:col-span-2 relative overflow-hidden">
+                     {/* Decorative Half-tone background for this card */}
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500 rounded-full blur-xl opacity-20 pointer-events-none"></div>
+                    <h3 className="font-comic-title text-2xl text-green-400 mb-4 border-b-2 border-green-400 inline-block [text-shadow:2px_2px_0_black]">Google Drive Sync</h3>
+                    <p className="mb-4 text-sm font-bold text-gray-300">Link folders for automated expense tracking.</p>
                     <div className="flex flex-col sm:flex-row gap-4">
-                        <Button onClick={() => handleLinkDrive('Expenses')} className="w-full">Link 'Expenses' Folder</Button>
-                        <Button onClick={() => handleLinkDrive('BillableReceipts')} className="w-full">Link 'Billable' Folder</Button>
-                        <Button onClick={handleBackup} variant="secondary" className="w-full">Backup Data to Drive</Button>
+                        <Button onClick={() => handleLinkDrive('Expenses')} className="w-full !bg-green-400 hover:!bg-green-300 !text-black">Link 'Expenses' Folder</Button>
+                        <Button onClick={() => handleLinkDrive('BillableReceipts')} className="w-full !bg-green-400 hover:!bg-green-300 !text-black">Link 'Billable' Folder</Button>
+                        <Button onClick={handleBackup} variant="secondary" className="w-full">Backup Data</Button>
                     </div>
                 </div>
 
-                 <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners">
-                    <h3 className="font-press-start text-lg sm:text-xl text-fuchsia-500 mb-2 sm:mb-4">Pay To Information</h3>
+                 <div className="bg-gray-700 p-4 border-[3px] border-black comic-shadow">
+                    <h3 className="font-comic-title text-2xl text-green-400 mb-4 border-b-2 border-green-400 inline-block [text-shadow:2px_2px_0_black]">Pay To Information</h3>
                     <UserProfileForm />
                 </div>
 
-                <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners">
-                    <div className="flex justify-between items-center mb-2 sm:mb-4">
-                        <h3 className="font-press-start text-lg sm:text-xl text-fuchsia-500">Company Profiles</h3>
-                        <Button onClick={openAddCompanyModal} className="text-xs !px-2 !py-1">+ Add</Button>
+                <div className="bg-gray-700 p-4 border-[3px] border-black comic-shadow">
+                    <div className="flex justify-between items-center mb-4 border-b-2 border-green-400 pb-2">
+                        <h3 className="font-comic-title text-2xl text-green-400 [text-shadow:2px_2px_0_black]">Company Profiles</h3>
+                        <Button onClick={openAddCompanyModal} className="text-xs !px-3 !py-1 !bg-green-400 hover:!bg-green-300 !text-black tracking-wider">+ Add</Button>
                     </div>
                     <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
                         {companies.map(company => (
-                            <div key={company.id} className="p-3 border-2 border-green-700 bg-black pixel-corners group">
+                            <div key={company.id} className="p-3 border-2 border-black bg-gray-600 group hover:bg-yellow-900 transition-colors">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <p className="font-bold text-green-500">{company.name}</p>
-                                        <p className="text-sm text-green-500 whitespace-pre-line">{company.address}</p>
-                                        <p className="text-sm mt-1">Rate: ${company.defaultRate}/day | Per Diem: ${company.defaultPerDiem}/day</p>
+                                        <p className="font-bold text-white text-lg">{company.name}</p>
+                                        <p className="text-sm text-gray-300 whitespace-pre-line font-bold">{company.address}</p>
+                                        <p className="text-xs mt-1 bg-black text-white inline-block px-1">Rate: ${company.defaultRate}/day</p>
                                     </div>
-                                    <Button variant="secondary" onClick={() => openEditCompanyModal(company)} className="text-xs !px-2 !py-1 opacity-0 group-hover:opacity-100 transition-opacity">Edit</Button>
+                                    <Button variant="secondary" onClick={() => openEditCompanyModal(company)} className="text-xs !px-2 !py-1 !border opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">Edit</Button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="bg-black p-2 sm:p-4 border-2 border-green-500 pixel-corners md:col-span-2">
-                    <div className="flex justify-between items-center mb-2 sm:mb-4">
-                        <h3 className="font-press-start text-lg sm:text-xl text-fuchsia-500">Expense Categories</h3>
-                        <Button onClick={openAddCategoryModal} className="text-xs !px-2 !py-1">+ Add</Button>
+                <div className="bg-gray-700 p-4 border-[3px] border-black comic-shadow md:col-span-2">
+                    <div className="flex justify-between items-center mb-4 border-b-2 border-green-400 pb-2">
+                        <h3 className="font-comic-title text-2xl text-green-400 [text-shadow:2px_2px_0_black]">Expense Categories</h3>
+                        <Button onClick={openAddCategoryModal} className="text-xs !px-3 !py-1 !bg-green-400 hover:!bg-green-300 !text-black tracking-wider">+ Add</Button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                         {expenseCategories.map(cat => (
-                           <div key={cat} className="p-2 border-2 border-green-700 bg-black pixel-corners group flex justify-between items-center">
-                                <p className="text-green-500 text-sm">{cat}</p>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button variant="secondary" onClick={() => openEditCategoryModal(cat)} className="text-xs !px-1 !py-0.5">Edit</Button>
-                                    <Button variant="danger" onClick={() => handleDeleteCategory(cat)} className="text-xs !px-1 !py-0.5">Del</Button>
+                           <div key={cat} className="p-2 border-2 border-black bg-cyan-900 hover:bg-cyan-800 transition-colors group flex justify-between items-center shadow-[2px_2px_0_rgba(0,0,0,0.5)]">
+                                <p className="text-white font-bold uppercase tracking-wide text-sm truncate">{cat}</p>
+                                <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button variant="secondary" onClick={() => openEditCategoryModal(cat)} className="text-xs !px-1 !py-0.5 border">Edit</Button>
+                                    <Button variant="danger" onClick={() => handleDeleteCategory(cat)} className="text-xs !px-1 !py-0.5 border">Del</Button>
                                 </div>
                            </div> 
                         ))}

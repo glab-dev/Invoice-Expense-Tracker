@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { AppProvider } from './context/AppContext';
 import DashboardTab from './tabs/DashboardTab';
@@ -29,20 +28,23 @@ const App: React.FC = () => {
 
   return (
     <AppProvider>
-      <div className="bg-black min-h-screen text-green-500 text-lg p-2 sm:p-4 md:p-6 crt">
-        <div className="max-w-7xl mx-auto border-4 border-green-500 pixel-corners bg-black bg-opacity-20">
-          <header className="p-4 border-b-4 border-green-500 flex flex-wrap justify-between items-center gap-y-2">
-            <h1 className="font-press-start text-base sm:text-xl md:text-2xl text-yellow-400">
-              Retro Invoice & Expense Tracker
+      <div className="min-h-screen p-2 sm:p-4 md:p-8">
+        <div className="max-w-7xl mx-auto border-[4px] border-black bg-gray-800 comic-shadow relative">
+          
+          {/* Header Section */}
+          <header className="p-4 sm:p-6 border-b-[4px] border-black bg-red-600 flex flex-wrap justify-between items-center gap-y-2 relative overflow-hidden">
+             {/* Decorative Speed Lines */}
+            <div className="absolute inset-0 opacity-10 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#000_10px,#000_12px)] pointer-events-none"></div>
+            
+            <h1 className="text-3xl sm:text-4xl md:text-5xl text-white drop-shadow-[3px_3px_0_rgba(0,0,0,1)] transform -rotate-1 relative z-10">
+              INVOICE/EXPENSE TRACKER
             </h1>
-            <div className="w-8 h-8 bg-red-500 border-2 border-green-500 animate-pulse"></div>
+            <div className="bg-yellow-400 border-2 border-black px-3 py-1 font-comic-title text-black transform rotate-2 shadow-[2px_2px_0_black]">
+              POW! BAM! PAID!
+            </div>
           </header>
 
-          <main className="p-2 sm:p-4 md:p-6 min-h-[calc(100vh-200px)]">
-            {renderTab()}
-          </main>
-
-          <nav className="p-2 border-t-4 border-green-500 grid grid-cols-2 sm:flex sm:justify-center gap-2">
+          <nav className="p-4 bg-gray-900 border-b-[4px] border-black flex flex-wrap justify-center gap-2 sm:gap-4 overflow-x-auto">
             <TabButton onClick={() => setActiveTab('DASHBOARD')} active={activeTab === 'DASHBOARD'}>
               Dashboard
             </TabButton>
@@ -56,6 +58,14 @@ const App: React.FC = () => {
               Settings
             </TabButton>
           </nav>
+
+          <main className="p-4 sm:p-6 md:p-8 min-h-[calc(100vh-300px)] bg-gray-800 text-white">
+            {renderTab()}
+          </main>
+          
+          <footer className="bg-black text-gray-400 p-2 text-center font-bold text-xs uppercase tracking-widest border-t-[4px] border-black">
+            Handcrafted for freelancers
+          </footer>
         </div>
       </div>
     </AppProvider>

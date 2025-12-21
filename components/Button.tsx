@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -7,12 +6,12 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const Button: React.FC<ButtonProps> = ({ children, variant = 'primary', className = '', ...props }) => {
-  const baseClasses = 'font-bold uppercase tracking-wider text-sm px-4 py-2 border-2 pixel-corners transition-all duration-150 transform active:translate-y-px';
+  const baseClasses = 'font-comic-title uppercase text-lg sm:text-xl tracking-wider px-6 py-2 border-2 border-black transition-all duration-200 comic-shadow-sm hover:comic-shadow-hover active:comic-shadow-active';
 
   const variantClasses = {
-    primary: 'bg-green-500 text-black border-green-500 hover:bg-yellow-400',
-    secondary: 'bg-red-600 text-yellow-300 border-red-500 hover:bg-red-500 hover:text-white',
-    danger: 'bg-red-500 text-white border-red-400 hover:bg-red-400',
+    primary: 'bg-yellow-400 text-black hover:bg-yellow-300',
+    secondary: 'bg-gray-700 text-white hover:bg-gray-600', // Dark mode secondary
+    danger: 'bg-red-600 text-white hover:bg-red-500',
   };
 
   return (
