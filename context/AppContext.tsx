@@ -10,6 +10,9 @@ import { convertToCAD } from '../services/currencyService';
 interface FileSystemHandle {
   kind: 'file' | 'directory';
   name: string;
+  isSameEntry: (other: FileSystemHandle) => Promise<boolean>;
+  queryPermission: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'>;
+  requestPermission: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<'granted' | 'denied' | 'prompt'>;
 }
 interface FileSystemFileHandle extends FileSystemHandle {
   getFile(): Promise<File>;
@@ -56,6 +59,7 @@ interface AppContextType {
   expensesFolderName: string;
   billableFolderName: string;
   isScanning: boolean;
+  isFileSystemSupported: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -75,6 +79,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expensesFolderHandle, setExpensesFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [billableFolderHandle, setBillableFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  
+  // Safe check for browser support
+  const isFileSystemSupported = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
   const updateUserProfile = (profile: UserProfile) => {
     setUserProfile(profile);
@@ -219,8 +226,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Folder Linking Logic ---
 
   const linkFolder = async (type: 'expenses' | 'billable') => {
-    if (!('showDirectoryPicker' in window)) {
-      alert("Your browser does not support Folder Linking (File System Access API). Please use a Desktop browser like Chrome, Edge, or Opera.");
+    if (!isFileSystemSupported) {
+      alert("Folder Linking is not supported on this browser or device. Please use the 'Manual Import' button.");
       return;
     }
     try {
@@ -245,6 +252,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Polling / Watching logic
   useEffect(() => {
+    if (!isFileSystemSupported) return;
     if (!expensesFolderHandle && !billableFolderHandle) return;
 
     const processFile = async (file: File, isBillable: boolean) => {
@@ -253,8 +261,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reader.onloadend = async () => {
           try {
             const base64String = (reader.result as string).split(',')[1];
-            // Use current expenseCategories from state
             
+            // Use current expenseCategories from state in closure or pass it if needed, 
+            // but for simplicity in effect, using default or context logic
             const ocrResult = await extractReceiptData(base64String, file.type, expenseCategories);
             
             const cadAmount = await convertToCAD(
@@ -290,6 +299,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     };
 
+    const verifyPermission = async (handle: FileSystemDirectoryHandle): Promise<boolean> => {
+        try {
+            const opts = { mode: 'read' as const };
+            if ((await handle.queryPermission(opts)) === 'granted') {
+                return true;
+            }
+            // We cannot request permission inside a loop/interval, so if it's not granted, we fail gracefully
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
     const scan = async () => {
       if (isScanning) return;
       setIsScanning(true);
@@ -301,6 +323,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       for (const { handle, isBillable } of handles) {
         if (!handle) continue;
+        
+        // Critical Fix: Verify permission before iterating. 
+        // Failing to do so causes "glitches" or crashes in some browsers.
+        const hasPermission = await verifyPermission(handle);
+        if (!hasPermission) {
+            console.warn("Permission lost for folder handle.");
+            continue;
+        }
+
         try {
           for await (const [name, entry] of handle.entries()) {
             if (entry.kind === 'file') {
@@ -320,19 +351,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch (err) {
             console.error("Error scanning folder:", err);
-            // Permission might be revoked
         }
       }
       setIsScanning(false);
     };
 
-    const intervalId = setInterval(scan, 5000); // Scan every 5 seconds
+    const intervalId = setInterval(scan, 10000); // Increased interval to 10s to reduce load
     
     // Run immediate scan on mount/link
     scan();
 
     return () => clearInterval(intervalId);
-  }, [expensesFolderHandle, billableFolderHandle, processedFiles, isScanning]);
+  }, [expensesFolderHandle, billableFolderHandle, processedFiles, isScanning, isFileSystemSupported]);
 
   return (
     <AppContext.Provider value={{
@@ -364,7 +394,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       billableFolderLinked: !!billableFolderHandle,
       expensesFolderName: expensesFolderHandle?.name || '',
       billableFolderName: billableFolderHandle?.name || '',
-      isScanning
+      isScanning,
+      isFileSystemSupported
     }}>
       {children}
     </AppContext.Provider>

@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import Button from '../components/Button';
 import Modal from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
-import { Company, UserProfile } from '../types';
+import { Company, UserProfile, Expense } from '../types';
 import { ImportExpensesModal } from './ExpensesTab';
+import { extractReceiptData } from '../services/geminiService';
+import { convertToCAD } from '../services/currencyService';
 
 const inputClass = "w-full bg-gray-700 text-white border-2 border-black p-2 font-bold focus:outline-none focus:shadow-[4px_4px_0_rgba(255,255,255,0.2)] transition-shadow placeholder-gray-400";
 const labelClass = "block text-white font-bold mb-1 uppercase tracking-wide text-sm";
@@ -134,7 +137,8 @@ const SettingsTab: React.FC = () => {
     const { 
         companies, addCompany, updateCompany, 
         expenseCategories, addExpenseCategory, updateExpenseCategory, deleteExpenseCategory,
-        linkFolder, unlinkFolder, expensesFolderLinked, billableFolderLinked, expensesFolderName, billableFolderName, isScanning
+        linkFolder, unlinkFolder, expensesFolderLinked, billableFolderLinked, expensesFolderName, billableFolderName, isScanning,
+        isFileSystemSupported, addExpenses
     } = useAppContext();
     
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -145,6 +149,14 @@ const SettingsTab: React.FC = () => {
     
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [importType, setImportType] = useState<'normal' | 'billable'>('normal');
+
+    // Simple state for manual import status feedback in Settings
+    const [manualImportStatus, setManualImportStatus] = useState<string>('');
+    const [isManualImporting, setIsManualImporting] = useState(false);
+
+    // Hidden file inputs for manual import
+    const manualExpensesInputRef = useRef<HTMLInputElement>(null);
+    const manualBillableInputRef = useRef<HTMLInputElement>(null);
 
     const handleBackup = () => alert('This would gather all app data as JSON and upload it to your Google Drive.');
 
@@ -175,6 +187,65 @@ const SettingsTab: React.FC = () => {
         }
     }
 
+    const handleManualImport = async (e: React.ChangeEvent<HTMLInputElement>, isBillable: boolean) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsManualImporting(true);
+        setManualImportStatus(`Processing ${files.length} files...`);
+
+        let successCount = 0;
+        let failCount = 0;
+        const newExpenses: Omit<Expense, 'id'>[] = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.name.startsWith('.')) continue; // Skip hidden
+            setManualImportStatus(`Processing ${i + 1}/${files.length}: ${file.name}`);
+            
+            try {
+                 const reader = new FileReader();
+                 const result = await new Promise<string>((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                 });
+                 
+                 const base64String = result.split(',')[1];
+                 const ocrResult = await extractReceiptData(base64String, file.type, expenseCategories);
+                 const cadAmount = await convertToCAD(
+                    ocrResult ? ocrResult.amount : 0, 
+                    ocrResult ? ocrResult.currency : 'CAD', 
+                    ocrResult ? ocrResult.date : new Date().toISOString().split('T')[0]
+                 );
+
+                 newExpenses.push({
+                    date: ocrResult ? ocrResult.date : new Date().toISOString().split('T')[0],
+                    description: ocrResult ? ocrResult.description : file.name,
+                    amount: ocrResult ? ocrResult.amount : 0,
+                    currency: ocrResult ? ocrResult.currency : 'CAD',
+                    cadAmount: cadAmount,
+                    category: ocrResult ? ocrResult.category : 'Misc',
+                    receiptUrl: result,
+                    isBillable: isBillable,
+                 });
+                 successCount++;
+            } catch (err) {
+                console.error(err);
+                failCount++;
+            }
+        }
+
+        if (newExpenses.length > 0) {
+            addExpenses(newExpenses);
+        }
+
+        setManualImportStatus(`Completed: ${successCount} Imported, ${failCount} Failed.`);
+        setIsManualImporting(false);
+        setTimeout(() => setManualImportStatus(''), 4000);
+        e.target.value = ''; // Reset input
+    };
+
     const sortedCategories = [...expenseCategories].sort((a, b) => a.localeCompare(b));
 
     return (
@@ -189,45 +260,89 @@ const SettingsTab: React.FC = () => {
                     <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500 rounded-full blur-xl opacity-20 pointer-events-none"></div>
                     
                     <div className="text-center mb-6">
-                        <h3 className="font-comic-title text-3xl text-green-400 inline-block [text-shadow:2px_2px_0_black] mb-2">FOLDER LINKING</h3>
-                        <p className="text-sm font-bold text-gray-300 max-w-md mx-auto">Auto-import expenses when files are added to linked folders.</p>
-                        {isScanning && <div className="mt-2 inline-block animate-pulse text-yellow-400 font-bold border border-yellow-400 px-2 py-1 bg-black text-xs">SCANNING...</div>}
+                        <h3 className="font-comic-title text-3xl text-green-400 inline-block [text-shadow:2px_2px_0_black] mb-2">FOLDER INTEGRATION</h3>
+                        <p className="text-sm font-bold text-gray-300 max-w-md mx-auto">
+                            {isFileSystemSupported 
+                                ? "Auto-import expenses via Live Link (Desktop) or Manual Import (Mobile/Desktop)."
+                                : "Your device supports Manual Batch Import. Select files to process expenses."}
+                        </p>
+                        {isScanning && <div className="mt-2 inline-block animate-pulse text-yellow-400 font-bold border border-yellow-400 px-2 py-1 bg-black text-xs">LIVE SCANNING...</div>}
+                        {manualImportStatus && <div className="mt-2 inline-block text-white font-bold bg-black border-2 border-white px-3 py-1 text-xs">{manualImportStatus}</div>}
                     </div>
 
                     <div className="space-y-4 max-w-lg mx-auto">
+                        
+                        {/* Hidden Inputs for Manual Mobile/Universal Import */}
+                        <input type="file" multiple ref={manualExpensesInputRef} onChange={(e) => handleManualImport(e, false)} className="hidden" accept="image/*,application/pdf" />
+                        <input type="file" multiple ref={manualBillableInputRef} onChange={(e) => handleManualImport(e, true)} className="hidden" accept="image/*,application/pdf" />
+
                         {/* Expenses Folder Card */}
                         <div className="bg-gray-800 p-6 border-2 border-black text-center shadow-[4px_4px_0_rgba(0,0,0,0.3)]">
-                            <h4 className="font-bold text-white uppercase text-lg tracking-wide mb-1">EXPENSES FOLDER</h4>
-                            {expensesFolderLinked ? (
-                                <p className="text-green-400 text-sm font-bold mb-4 truncate">Linked: {expensesFolderName}</p>
-                            ) : (
-                                <p className="text-gray-500 text-sm italic mb-4">Not linked</p>
-                            )}
+                            <h4 className="font-bold text-white uppercase text-lg tracking-wide mb-1">GENERAL EXPENSES</h4>
                             
-                            <Button 
-                                onClick={() => expensesFolderLinked ? unlinkFolder('expenses') : linkFolder('expenses')} 
-                                className={`w-full ${expensesFolderLinked ? '!bg-red-600 hover:!bg-red-500 !text-white' : '!bg-green-400 hover:!bg-green-300 !text-black'}`}
-                            >
-                                {expensesFolderLinked ? 'UNLINK FOLDER' : 'LINK FOLDER'}
-                            </Button>
+                            {isFileSystemSupported ? (
+                                <>
+                                    {expensesFolderLinked ? (
+                                        <p className="text-green-400 text-sm font-bold mb-4 truncate">Linked: {expensesFolderName}</p>
+                                    ) : (
+                                        <p className="text-gray-500 text-sm italic mb-4">Live Link Inactive</p>
+                                    )}
+                                    
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button 
+                                            onClick={() => expensesFolderLinked ? unlinkFolder('expenses') : linkFolder('expenses')} 
+                                            className={`text-sm ${expensesFolderLinked ? '!bg-red-600 hover:!bg-red-500 !text-white' : '!bg-green-400 hover:!bg-green-300 !text-black'}`}
+                                        >
+                                            {expensesFolderLinked ? 'UNLINK (LIVE)' : 'LINK FOLDER (LIVE)'}
+                                        </Button>
+                                        <Button onClick={() => manualExpensesInputRef.current?.click()} className="text-sm !bg-yellow-400 !text-black" disabled={isManualImporting}>
+                                            BATCH IMPORT
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-gray-400 text-xs italic mb-4">Live Linking not supported on this device.</p>
+                                    <Button onClick={() => manualExpensesInputRef.current?.click()} className="w-full !bg-yellow-400 !text-black" disabled={isManualImporting}>
+                                        BATCH IMPORT IMAGES/PDFS
+                                    </Button>
+                                </>
+                            )}
                         </div>
 
                         {/* Billable Folder Card */}
                         <div className="bg-gray-800 p-6 border-2 border-black text-center shadow-[4px_4px_0_rgba(0,0,0,0.3)]">
-                            <h4 className="font-bold text-white uppercase text-lg tracking-wide mb-1">BILLABLE RECEIPTS FOLDER</h4>
-                            <p className="text-yellow-400 text-xs font-bold mb-1">Items imported here are marked Billable.</p>
-                            {billableFolderLinked ? (
-                                <p className="text-green-400 text-sm font-bold mb-4 truncate">Linked: {billableFolderName}</p>
-                            ) : (
-                                <p className="text-gray-500 text-sm italic mb-4">Not linked</p>
-                            )}
+                            <h4 className="font-bold text-white uppercase text-lg tracking-wide mb-1">BILLABLE RECEIPTS</h4>
+                            <p className="text-yellow-400 text-xs font-bold mb-2">Imported items marked as 'Billable'</p>
                             
-                            <Button 
-                                onClick={() => billableFolderLinked ? unlinkFolder('billable') : linkFolder('billable')} 
-                                className={`w-full ${billableFolderLinked ? '!bg-red-600 hover:!bg-red-500 !text-white' : '!bg-green-400 hover:!bg-green-300 !text-black'}`}
-                            >
-                                {billableFolderLinked ? 'UNLINK FOLDER' : 'LINK FOLDER'}
-                            </Button>
+                            {isFileSystemSupported ? (
+                                <>
+                                    {billableFolderLinked ? (
+                                        <p className="text-green-400 text-sm font-bold mb-4 truncate">Linked: {billableFolderName}</p>
+                                    ) : (
+                                        <p className="text-gray-500 text-sm italic mb-4">Live Link Inactive</p>
+                                    )}
+                                    
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button 
+                                            onClick={() => billableFolderLinked ? unlinkFolder('billable') : linkFolder('billable')} 
+                                            className={`text-sm ${billableFolderLinked ? '!bg-red-600 hover:!bg-red-500 !text-white' : '!bg-green-400 hover:!bg-green-300 !text-black'}`}
+                                        >
+                                            {billableFolderLinked ? 'UNLINK (LIVE)' : 'LINK FOLDER (LIVE)'}
+                                        </Button>
+                                        <Button onClick={() => manualBillableInputRef.current?.click()} className="text-sm !bg-yellow-400 !text-black" disabled={isManualImporting}>
+                                            BATCH IMPORT
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-gray-400 text-xs italic mb-4">Live Linking not supported on this device.</p>
+                                    <Button onClick={() => manualBillableInputRef.current?.click()} className="w-full !bg-yellow-400 !text-black" disabled={isManualImporting}>
+                                        BATCH IMPORT IMAGES/PDFS
+                                    </Button>
+                                </>
+                            )}
                         </div>
 
                         <Button onClick={handleBackup} variant="secondary" className="w-full !bg-gray-700 hover:!bg-gray-600 !text-white !border-2 !border-black font-bold tracking-wider mt-4">
