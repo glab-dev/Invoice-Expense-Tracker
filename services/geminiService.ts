@@ -1,13 +1,26 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const API_KEY = process.env.API_KEY;
+const getApiKey = (): string | undefined => {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.API_KEY;
+    }
+    return undefined;
+  } catch (e) {
+    return undefined;
+  }
+};
+
+const API_KEY = getApiKey();
 
 if (!API_KEY) {
   console.error("Gemini API key not found. Please set the API_KEY environment variable.");
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
+// Use a fallback empty string or dummy key to prevent initialization crash.
+// The service methods check for API_KEY validity before making calls.
+const ai = new GoogleGenAI({ apiKey: API_KEY || "MISSING_KEY" });
 
 interface OcrResult {
   date: string; // "YYYY-MM-DD"
