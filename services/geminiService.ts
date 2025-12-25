@@ -66,13 +66,9 @@ export interface InvoiceOcrResult {
 export const extractReceiptData = async (fileBase64: string, mimeType: string, availableCategories: string[]): Promise<OcrResult | null> => {
   if (!API_KEY) {
     console.error("Cannot call Gemini API: API key is missing.");
-    return {
-      date: new Date().toISOString().split('T')[0],
-      description: "Mocked Receipt Item",
-      amount: 123.45,
-      currency: "CAD",
-      category: availableCategories[0] || "Misc",
-    };
+    // Return null instead of mock data so the UI falls back to file name/manual entry
+    // This prevents the "Mocked Receipt Item" issue.
+    return null;
   }
   try {
     const filePart = {
@@ -83,7 +79,12 @@ export const extractReceiptData = async (fileBase64: string, mimeType: string, a
     };
 
     const textPart = {
-      text: `Analyze this receipt document. Extract the vendor name or a brief description, the transaction date (YYYY-MM-DD), the total amount, and the currency code (e.g., USD, CAD). Also, categorize it into one of the following: ${availableCategories.join(', ')}. Respond with ONLY a valid JSON object.`,
+      text: `Analyze this receipt document carefully.
+      1. Extract the Merchant or Vendor Name (e.g., "Starbucks", "Uber", "Best Buy"). Use this EXACT name as the 'description'. Do NOT use generic terms like "Coffee" unless the vendor is unknown.
+      2. Extract the Transaction Date. Look for the main date on the receipt. Format it strictly as YYYY-MM-DD.
+      3. Extract the Total Amount and Currency (default to CAD if ambiguous but looks like Canada, otherwise USD/EUR etc).
+      4. Categorize the expense into exactly one of these categories: ${availableCategories.join(', ')}. Analyze the line items to determine the best fit (e.g., food/drink -> Meals, flights/taxis -> Travel, hotels -> Lodging, equipment -> Gear).
+      Respond with ONLY a valid JSON object matching the schema.`,
     };
 
     const response = await ai.models.generateContent({
@@ -95,10 +96,10 @@ export const extractReceiptData = async (fileBase64: string, mimeType: string, a
           type: Type.OBJECT,
           properties: {
             date: { type: Type.STRING, description: 'Transaction date in YYYY-MM-DD format.' },
-            description: { type: Type.STRING, description: 'Vendor name or a brief description of the purchase.' },
+            description: { type: Type.STRING, description: 'The Merchant/Vendor Name (e.g. Starbucks, Hilton).' },
             amount: { type: Type.NUMBER, description: 'The total amount of the transaction.' },
             currency: { type: Type.STRING, description: 'The 3-letter currency code (e.g., USD, CAD, EUR).' },
-            category: { type: Type.STRING, description: 'The expense category.', enum: availableCategories },
+            category: { type: Type.STRING, description: 'The expense category selected from the provided list.', enum: availableCategories },
           },
           required: ['date', 'description', 'amount', 'currency', 'category'],
         }
