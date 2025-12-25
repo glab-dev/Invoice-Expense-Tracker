@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Button from '../components/Button';
@@ -215,7 +216,7 @@ const ExportOptionsModal: React.FC<{
 
 
 const ExpensesTab: React.FC = () => {
-  const { expenses, addExpense, updateExpense } = useAppContext();
+  const { expenses, addExpense, updateExpense, deleteExpense, deleteAllExpenses } = useAppContext();
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -240,6 +241,18 @@ const ExpensesTab: React.FC = () => {
     }
     setIsFormModalOpen(false);
     setEditingExpense(null);
+  };
+
+  const handleDeleteExpense = (id: string) => {
+      if (window.confirm("Are you sure you want to delete this expense? This action cannot be undone.")) {
+          deleteExpense(id);
+      }
+  };
+
+  const handleDeleteAll = () => {
+      if (window.confirm("WARNING: You are about to DELETE ALL EXPENSES. This cannot be undone. Are you absolutely sure?")) {
+          deleteAllExpenses();
+      }
   };
 
   const handleExport = (type: 'all' | 'billable' | 'non-billable') => {
@@ -346,6 +359,7 @@ const ExpensesTab: React.FC = () => {
                     <option value="no">Non-Billable</option>
                 </select>
             </div>
+            {expenses.length > 0 && <Button variant="danger" onClick={handleDeleteAll} className="text-sm !px-4 !py-2">Delete All</Button>}
             <Button variant="secondary" onClick={() => setIsExportModalOpen(true)} className="text-sm !px-4 !py-2">Export</Button>
             <Button onClick={openNewModal} className="text-sm !px-4 !py-2">+ Add Expense</Button>
         </div>
@@ -373,6 +387,7 @@ const ExpensesTab: React.FC = () => {
                       <div className="flex gap-2">
                         <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => setViewingExpense(expense)}>View</Button>
                         <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(expense)}>Edit</Button>
+                        <Button variant="danger" className="text-xs !px-2 !py-1 !border" onClick={() => handleDeleteExpense(expense.id)}>Del</Button>
                       </div>
                     </div>
                   </div>
@@ -412,6 +427,7 @@ const ExpensesTab: React.FC = () => {
                           <td className="p-3 flex gap-2">
                               <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => setViewingExpense(expense)}>View</Button>
                               <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(expense)}>Edit</Button>
+                              <Button variant="danger" className="text-xs !px-2 !py-1 !border" onClick={() => handleDeleteExpense(expense.id)}>Del</Button>
                           </td>
                           </tr>
                       ))}

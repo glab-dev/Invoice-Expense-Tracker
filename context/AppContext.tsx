@@ -17,13 +17,15 @@ interface AppContextType {
   deleteExpenseCategory: (category: string) => void;
   addExpense: (expense: Omit<Expense, 'id'>) => Expense;
   updateExpense: (expense: Expense) => void;
+  deleteExpense: (id: string) => void;
+  deleteAllExpenses: () => void;
   getCompany: (id: string) => Company | undefined;
   addCompany: (company: Omit<Company, 'id'>) => Company;
   updateCompany: (company: Company) => void;
   addInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber'>) => Invoice;
   updateInvoice: (invoice: Invoice) => void;
   importInvoiceWithExpenses: (
-    invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'attachedExpenseIds'>,
+    invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'attachedExpenseIds' | 'items'> & { items: Omit<InvoiceItem, 'id'>[] },
     expensesData: Omit<Expense, 'id'>[]
   ) => void;
   userProfile: UserProfile;
@@ -83,6 +85,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses(prev => prev.map(exp => exp.id === updatedExpense.id ? updatedExpense : exp));
   };
   
+  const deleteExpense = (id: string) => {
+    // Remove the expense
+    setExpenses(prev => prev.filter(exp => exp.id !== id));
+    // Also remove any references to this expense from existing invoices
+    setInvoices(prev => prev.map(inv => ({
+      ...inv,
+      attachedExpenseIds: (inv.attachedExpenseIds || []).filter(expId => expId !== id)
+    })));
+  };
+
+  const deleteAllExpenses = () => {
+    setExpenses([]);
+    // Remove all attached expense references from invoices
+    setInvoices(prev => prev.map(inv => ({
+        ...inv,
+        attachedExpenseIds: []
+    })));
+  };
+
   const getCompany = (id: string) => companies.find(c => c.id === id);
 
   const addCompany = (companyData: Omit<Company, 'id'>) => {
@@ -151,6 +172,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deleteExpenseCategory,
       addExpense,
       updateExpense,
+      deleteExpense,
+      deleteAllExpenses,
       getCompany,
       addCompany,
       updateCompany,
