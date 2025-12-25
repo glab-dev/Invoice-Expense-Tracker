@@ -1,6 +1,10 @@
 
 import { Company, Invoice, Expense } from './types';
 
+// Bump this version manually in code when deploying updates.
+// It must match the value in version.json for the app to be considered "up to date".
+export const APP_VERSION = '1.0.0';
+
 export const MOCK_COMPANIES: Company[] = [
   { id: 'comp-1', name: 'Apex Lighting', address: '123 Pixel Ave, Tron City', defaultRate: 600, defaultPerDiem: 75 },
   { id: 'comp-2', name: 'Soundbox Audio', address: '456 Synth St, Neo Kyoto', defaultRate: 550, defaultPerDiem: 50 },

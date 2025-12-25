@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { AppProvider } from './context/AppContext';
 import DashboardTab from './tabs/DashboardTab';
@@ -5,6 +6,7 @@ import InvoicesTab from './tabs/InvoicesTab';
 import ExpensesTab from './tabs/ExpensesTab';
 import SettingsTab from './tabs/SettingsTab';
 import TabButton from './components/TabButton';
+import VersionChecker from './components/VersionChecker';
 
 type Tab = 'DASHBOARD' | 'INVOICES' | 'EXPENSES' | 'SETTINGS';
 
@@ -29,6 +31,7 @@ const App: React.FC = () => {
   return (
     <AppProvider>
       <div className="min-h-screen p-2 sm:p-4 md:p-8">
+        <VersionChecker />
         <div className="max-w-7xl mx-auto border-[4px] border-black bg-gray-800 comic-shadow relative">
           
           {/* Header Section */}
@@ -64,7 +67,7 @@ const App: React.FC = () => {
           </main>
           
           <footer className="bg-black text-gray-400 p-2 text-center font-bold text-xs uppercase tracking-widest border-t-[4px] border-black">
-            Handcrafted for freelancers
+            Fearless Wanderer Productions
           </footer>
         </div>
       </div>
