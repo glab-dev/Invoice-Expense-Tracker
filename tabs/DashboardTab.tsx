@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { Company } from '../types';
 import { CURRENCY_RATES } from '../constants';
 
@@ -45,6 +46,24 @@ const DashboardTab: React.FC = () => {
 
   const totalExpenses = expensesToDisplay.reduce((acc, exp) => acc + exp.cadAmount, 0);
 
+  // NEW: Calculate All Expenses by Category for Pie Chart
+  const allExpensesByCategory = expenses.reduce((acc, exp) => {
+    const category = exp.category || 'Misc';
+    if (!acc[category]) {
+      acc[category] = 0;
+    }
+    acc[category] += exp.cadAmount;
+    return acc;
+  }, {} as { [key: string]: number });
+
+  const pieData = Object.keys(allExpensesByCategory).map(category => ({
+    name: category,
+    value: allExpensesByCategory[category]
+  })).filter(item => item.value > 0);
+
+  // Retro colors for Pie Chart
+  const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#6366f1'];
+
   const monthlyData = paidInvoices.reduce((acc, invoice) => {
     const month = new Date(invoice.date).toLocaleString('default', { month: 'short' });
     if (!acc[month]) {
@@ -73,6 +92,35 @@ const DashboardTab: React.FC = () => {
         <p className="text-3xl font-bold mt-1 text-white font-comic-title tracking-wider">{value}</p>
     </div>
   );
+
+  // Custom label for Pie Chart to match retro style
+  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name, fill }: any) => {
+    const RADIAN = Math.PI / 180;
+    const radius = outerRadius + 30; // Push label out
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <text 
+        x={x} 
+        y={y} 
+        fill={fill} // Text color matches slice color
+        textAnchor={x > cx ? 'start' : 'end'} 
+        dominantBaseline="central"
+        className="font-comic-title"
+        style={{ 
+            fontSize: '16px', 
+            fontWeight: 'bold', 
+            stroke: '#000', 
+            strokeWidth: '4px', // Thick outline
+            paintOrder: 'stroke',
+            strokeLinejoin: 'round'
+        }}
+      >
+        <tspan fill={fill} stroke="none">{`${name} (${(percent * 100).toFixed(0)}%)`}</tspan>
+      </text>
+    );
+  };
 
   return (
     <div>
@@ -120,6 +168,55 @@ const DashboardTab: React.FC = () => {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Expenses Pie Chart Section */}
+        <div className="bg-gray-700 p-4 sm:p-6 border-[3px] border-black comic-shadow flex flex-col items-center">
+            <h3 className="font-comic-title text-2xl text-white mb-6 border-b-2 border-black inline-block px-2 bg-red-600 shadow-[2px_2px_0_black] transform -skew-x-12">EXPENSES BREAKDOWN</h3>
+            <div className="h-96 w-full flex flex-col items-center justify-center">
+                {pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                            <Pie
+                                data={pieData}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={true}
+                                label={renderCustomizedLabel}
+                                outerRadius={110}
+                                fill="#8884d8"
+                                dataKey="value"
+                                stroke="#000"
+                                strokeWidth={2}
+                            >
+                                {pieData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip 
+                                contentStyle={{
+                                  backgroundColor: '#1f2937',
+                                  border: '2px solid #000',
+                                  boxShadow: '4px 4px 0px 0px #000',
+                                  fontFamily: 'Comic Neue',
+                                  fontWeight: 'bold',
+                                  color: '#fff'
+                                }}
+                                formatter={(value: number) => [`$${value.toFixed(2)}`, 'CAD']}
+                            />
+                            <Legend 
+                                layout="horizontal" 
+                                verticalAlign="bottom" 
+                                align="center" 
+                                wrapperStyle={{ fontFamily: 'Comic Neue', fontWeight: 'bold', color: 'white', paddingTop: '20px' }} 
+                            />
+                        </PieChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="text-gray-400 italic font-bold">No expenses recorded yet.</div>
+                )}
+            </div>
+        </div>
+
       </div>
     </div>
   );

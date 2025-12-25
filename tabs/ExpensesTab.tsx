@@ -198,6 +198,164 @@ const ExpenseViewModal: React.FC<{ expense: Expense | null, onClose: () => void 
     );
 };
 
+export const ImportExpensesModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    defaultBillable?: boolean;
+}> = ({ isOpen, onClose, defaultBillable = false }) => {
+    const { addExpenses, expenseCategories } = useAppContext();
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('');
+    const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+    const [isFolderMode, setIsFolderMode] = useState(false);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSelectedFiles(e.target.files);
+        setStatusMessage('');
+    }
+
+    const processFile = (file: File): Promise<Omit<Expense, 'id'>> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                try {
+                    const base64String = (reader.result as string).split(',')[1];
+                    const ocrResult = await extractReceiptData(base64String, file.type, expenseCategories);
+                    
+                    const cadAmount = await convertToCAD(
+                        ocrResult ? ocrResult.amount : 0, 
+                        ocrResult ? ocrResult.currency : 'CAD', 
+                        ocrResult ? ocrResult.date : new Date().toISOString().split('T')[0]
+                    );
+
+                    resolve({
+                        date: ocrResult ? ocrResult.date : new Date().toISOString().split('T')[0],
+                        description: ocrResult ? ocrResult.description : file.name,
+                        amount: ocrResult ? ocrResult.amount : 0,
+                        currency: ocrResult ? ocrResult.currency : 'CAD',
+                        cadAmount: cadAmount,
+                        category: ocrResult ? ocrResult.category : 'Misc',
+                        receiptUrl: reader.result as string,
+                        isBillable: defaultBillable,
+                    });
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    const handleImport = async () => {
+        if (!selectedFiles || selectedFiles.length === 0) {
+            alert('Please select files to import.');
+            return;
+        }
+
+        setIsProcessing(true);
+        setStatusMessage('Starting import...');
+        
+        let successCount = 0;
+        let failCount = 0;
+        const newExpenses: Omit<Expense, 'id'>[] = [];
+
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles.item(i);
+            if (!file) continue;
+            // Skip system files if any
+            if (file.name.startsWith('.')) continue;
+
+            setStatusMessage(`Processing ${i + 1}/${selectedFiles.length}: ${file.name}`);
+            try {
+                const expense = await processFile(file);
+                newExpenses.push(expense);
+                successCount++;
+            } catch (err) {
+                console.error(err);
+                failCount++;
+            }
+        }
+
+        if (newExpenses.length > 0) {
+            addExpenses(newExpenses);
+        }
+
+        setStatusMessage(`Import Complete. Processed ${successCount}, Failed ${failCount}.`);
+        setIsProcessing(false);
+        setTimeout(() => {
+            if (successCount > 0) onClose();
+            setStatusMessage('');
+            setSelectedFiles(null);
+        }, 2000);
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={defaultBillable ? "Import Billable Receipts" : "Import Expenses"}>
+             <div className="space-y-4">
+                <p>Select receipt images or PDFs to batch import. You can select multiple files or an entire folder.</p>
+                {defaultBillable && <p className="text-yellow-400 font-bold bg-black p-2 border border-yellow-400">NOTE: All imported items will be marked as BILLABLE.</p>}
+
+                <div className="flex gap-4 mb-2">
+                    <Button 
+                        variant={!isFolderMode ? 'primary' : 'secondary'} 
+                        onClick={() => { setIsFolderMode(false); setSelectedFiles(null); }}
+                        className="text-sm !py-1"
+                    >
+                        Select Files
+                    </Button>
+                    <Button 
+                        variant={isFolderMode ? 'primary' : 'secondary'} 
+                        onClick={() => { setIsFolderMode(true); setSelectedFiles(null); }}
+                        className="text-sm !py-1"
+                    >
+                        Select Folder
+                    </Button>
+                </div>
+
+                <div className="border-2 border-black border-dashed p-6 text-center bg-gray-700">
+                    {!isFolderMode ? (
+                        <input 
+                            type="file" 
+                            multiple
+                            onChange={handleFileChange} 
+                            accept="application/pdf,image/*" 
+                            className="text-sm text-white w-full" 
+                        />
+                    ) : (
+                        <input 
+                            type="file" 
+                            multiple
+                            {...({ webkitdirectory: "", directory: "" } as any)}
+                            onChange={handleFileChange} 
+                            className="text-sm text-white w-full" 
+                        />
+                    )}
+                    
+                    {selectedFiles && selectedFiles.length > 0 && (
+                        <div className="mt-2 text-left bg-gray-800 p-2 max-h-32 overflow-y-auto">
+                            <p className="text-xs font-bold text-yellow-400 mb-1">{selectedFiles.length} files selected:</p>
+                            {Array.from(selectedFiles).map((f: any, i) => (
+                                <p key={i} className="text-xs text-gray-300 truncate">{f.name}</p>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                {statusMessage && (
+                    <div className="bg-black p-2 border-2 border-white">
+                        <p className="text-green-400 font-mono text-sm">{statusMessage}</p>
+                    </div>
+                )}
+                
+                <div className="flex justify-end gap-4 pt-4 border-t-2 border-black">
+                    <Button variant="secondary" onClick={onClose} disabled={isProcessing}>Cancel</Button>
+                    <Button onClick={handleImport} disabled={isProcessing || !selectedFiles}>{isProcessing ? 'Processing...' : 'Start Import'}</Button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 const ExportOptionsModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -224,6 +382,7 @@ const ExpensesTab: React.FC = () => {
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [billableFilter, setBillableFilter] = useState<'all' | 'yes' | 'no'>('all');
   
   const openNewModal = () => {
@@ -363,6 +522,7 @@ const ExpensesTab: React.FC = () => {
                 </select>
             </div>
             {expenses.length > 0 && <Button variant="danger" onClick={handleDeleteAll} className="text-sm !px-4 !py-2">Delete All</Button>}
+            <Button variant="secondary" onClick={() => setIsImportModalOpen(true)} className="text-sm !px-4 !py-2">Import</Button>
             <Button variant="secondary" onClick={() => setIsExportModalOpen(true)} className="text-sm !px-4 !py-2">Export</Button>
             <Button onClick={openNewModal} className="text-sm !px-4 !py-2">+ Add Expense</Button>
         </div>
@@ -452,6 +612,8 @@ const ExpensesTab: React.FC = () => {
 
       <ExpenseViewModal expense={viewingExpense} onClose={() => setViewingExpense(null)} />
       
+      <ImportExpensesModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} />
+
       <ExportOptionsModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} onExport={handleExport} />
     </div>
   );

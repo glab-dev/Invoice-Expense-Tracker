@@ -3,6 +3,7 @@ import Button from '../components/Button';
 import Modal from '../components/Modal';
 import { useAppContext } from '../context/AppContext';
 import { Company, UserProfile } from '../types';
+import { ImportExpensesModal } from './ExpensesTab';
 
 const inputClass = "w-full bg-gray-700 text-white border-2 border-black p-2 font-bold focus:outline-none focus:shadow-[4px_4px_0_rgba(255,255,255,0.2)] transition-shadow placeholder-gray-400";
 const labelClass = "block text-white font-bold mb-1 uppercase tracking-wide text-sm";
@@ -130,14 +131,21 @@ const UserProfileForm: React.FC = () => {
 }
 
 const SettingsTab: React.FC = () => {
-    const { companies, addCompany, updateCompany, expenseCategories, addExpenseCategory, updateExpenseCategory, deleteExpenseCategory } = useAppContext();
+    const { 
+        companies, addCompany, updateCompany, 
+        expenseCategories, addExpenseCategory, updateExpenseCategory, deleteExpenseCategory,
+        linkFolder, unlinkFolder, expensesFolderLinked, billableFolderLinked, expensesFolderName, billableFolderName, isScanning
+    } = useAppContext();
+    
     const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
 
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<string | undefined>(undefined);
     
-    const handleLinkDrive = (folderType: 'Expenses' | 'BillableReceipts') => alert(`This would initiate Google OAuth to link your '/RetroInvoiceTracker/${folderType}' folder.`);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [importType, setImportType] = useState<'normal' | 'billable'>('normal');
+
     const handleBackup = () => alert('This would gather all app data as JSON and upload it to your Google Drive.');
 
     const openAddCompanyModal = () => { setEditingCompany(null); setIsCompanyModalOpen(true); }
@@ -179,12 +187,52 @@ const SettingsTab: React.FC = () => {
                 <div className="bg-gray-700 p-4 border-[3px] border-black comic-shadow md:col-span-2 relative overflow-hidden">
                      {/* Decorative Half-tone background for this card */}
                     <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500 rounded-full blur-xl opacity-20 pointer-events-none"></div>
-                    <h3 className="font-comic-title text-2xl text-green-400 mb-4 border-b-2 border-green-400 inline-block [text-shadow:2px_2px_0_black]">Google Drive Sync</h3>
-                    <p className="mb-4 text-sm font-bold text-gray-300">Link folders for automated expense tracking.</p>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <Button onClick={() => handleLinkDrive('Expenses')} className="w-full !bg-green-400 hover:!bg-green-300 !text-black">Link 'Expenses' Folder</Button>
-                        <Button onClick={() => handleLinkDrive('BillableReceipts')} className="w-full !bg-green-400 hover:!bg-green-300 !text-black">Link 'Billable' Folder</Button>
-                        <Button onClick={handleBackup} variant="secondary" className="w-full">Backup Data</Button>
+                    
+                    <div className="text-center mb-6">
+                        <h3 className="font-comic-title text-3xl text-green-400 inline-block [text-shadow:2px_2px_0_black] mb-2">FOLDER LINKING</h3>
+                        <p className="text-sm font-bold text-gray-300 max-w-md mx-auto">Auto-import expenses when files are added to linked folders.</p>
+                        {isScanning && <div className="mt-2 inline-block animate-pulse text-yellow-400 font-bold border border-yellow-400 px-2 py-1 bg-black text-xs">SCANNING...</div>}
+                    </div>
+
+                    <div className="space-y-4 max-w-lg mx-auto">
+                        {/* Expenses Folder Card */}
+                        <div className="bg-gray-800 p-6 border-2 border-black text-center shadow-[4px_4px_0_rgba(0,0,0,0.3)]">
+                            <h4 className="font-bold text-white uppercase text-lg tracking-wide mb-1">EXPENSES FOLDER</h4>
+                            {expensesFolderLinked ? (
+                                <p className="text-green-400 text-sm font-bold mb-4 truncate">Linked: {expensesFolderName}</p>
+                            ) : (
+                                <p className="text-gray-500 text-sm italic mb-4">Not linked</p>
+                            )}
+                            
+                            <Button 
+                                onClick={() => expensesFolderLinked ? unlinkFolder('expenses') : linkFolder('expenses')} 
+                                className={`w-full ${expensesFolderLinked ? '!bg-red-600 hover:!bg-red-500 !text-white' : '!bg-green-400 hover:!bg-green-300 !text-black'}`}
+                            >
+                                {expensesFolderLinked ? 'UNLINK FOLDER' : 'LINK FOLDER'}
+                            </Button>
+                        </div>
+
+                        {/* Billable Folder Card */}
+                        <div className="bg-gray-800 p-6 border-2 border-black text-center shadow-[4px_4px_0_rgba(0,0,0,0.3)]">
+                            <h4 className="font-bold text-white uppercase text-lg tracking-wide mb-1">BILLABLE RECEIPTS FOLDER</h4>
+                            <p className="text-yellow-400 text-xs font-bold mb-1">Items imported here are marked Billable.</p>
+                            {billableFolderLinked ? (
+                                <p className="text-green-400 text-sm font-bold mb-4 truncate">Linked: {billableFolderName}</p>
+                            ) : (
+                                <p className="text-gray-500 text-sm italic mb-4">Not linked</p>
+                            )}
+                            
+                            <Button 
+                                onClick={() => billableFolderLinked ? unlinkFolder('billable') : linkFolder('billable')} 
+                                className={`w-full ${billableFolderLinked ? '!bg-red-600 hover:!bg-red-500 !text-white' : '!bg-green-400 hover:!bg-green-300 !text-black'}`}
+                            >
+                                {billableFolderLinked ? 'UNLINK FOLDER' : 'LINK FOLDER'}
+                            </Button>
+                        </div>
+
+                        <Button onClick={handleBackup} variant="secondary" className="w-full !bg-gray-700 hover:!bg-gray-600 !text-white !border-2 !border-black font-bold tracking-wider mt-4">
+                            BACKUP DATA
+                        </Button>
                     </div>
                 </div>
 
@@ -241,6 +289,13 @@ const SettingsTab: React.FC = () => {
             <Modal isOpen={isCategoryModalOpen} onClose={() => setIsCategoryModalOpen(false)} title={editingCategory ? 'Edit Category' : 'Add New Category'}>
                 <CategoryForm category={editingCategory} onSave={handleSaveCategory} onCancel={() => setIsCategoryModalOpen(false)} />
             </Modal>
+            
+            {/* Reusing the ImportExpensesModal from ExpensesTab logic */}
+            <ImportExpensesModal 
+                isOpen={isImportModalOpen} 
+                onClose={() => setIsImportModalOpen(false)} 
+                defaultBillable={importType === 'billable'} 
+            />
         </div>
     );
 };

@@ -49,6 +49,7 @@ export interface InvoiceOcrResult {
   companyName: string;
   companyAddress: string;
   date: string; // "YYYY-MM-DD"
+  invoiceNumber?: number;
   items: ExtractedInvoiceItem[];
   perDiemQuantity: number;
   expenses: ExtractedExpense[];
@@ -140,7 +141,7 @@ export const extractInvoiceData = async (fileBase64: string, mimeType: string): 
     };
 
     const textPart = {
-      text: "Analyze this invoice document. The invoice is being sent TO a client. Identify the client company being billed (often labeled 'Bill To:' or just being the main recipient address), not the sender or the 'Pay To' entity. Extract the client's company name, their billing address, and the primary invoice date (YYYY-MM-DD). For line items, extract their start/end dates, description, quantity, rate description (e.g., 'day', '15 days'), and total amount. Also separately extract any summarized Per Diem quantity (e.g., from 'PD's: $750 x15', extract just the number 15). Also separately extract a list of expenses (often in their own box); for each expense, get its description, date (YYYY-MM-DD), and amount. Finally, extract any notes or memos. Respond with ONLY a valid JSON object.",
+      text: "Analyze this invoice document. The invoice is being sent TO a client. Identify the client company being billed (often labeled 'Bill To:' or just being the main recipient address), not the sender or the 'Pay To' entity. Extract the client's company name, their billing address, and the primary invoice date (YYYY-MM-DD). Extract the Invoice Number if present (as a number/integer). For line items, extract their start/end dates, description, quantity, rate description (e.g., 'day', '15 days'), and total amount. Also separately extract any summarized Per Diem quantity (e.g., from 'PD's: $750 x15', extract just the number 15). Also separately extract a list of expenses (often in their own box); for each expense, get its description, date (YYYY-MM-DD), and amount. Finally, extract any notes or memos. Respond with ONLY a valid JSON object.",
     };
 
     const response = await ai.models.generateContent({
@@ -154,6 +155,7 @@ export const extractInvoiceData = async (fileBase64: string, mimeType: string): 
             companyName: { type: Type.STRING, description: "The client's company name." },
             companyAddress: { type: Type.STRING, description: "The client's billing address." },
             date: { type: Type.STRING, description: 'Invoice date in YYYY-MM-DD format.' },
+            invoiceNumber: { type: Type.NUMBER, description: 'The extracted invoice number (integer).' },
             items: {
               type: Type.ARRAY,
               description: "List of line items from the invoice.",

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import Button from '../components/Button';
@@ -449,7 +450,7 @@ const InvoiceViewModal: React.FC<{ invoice: Invoice | null, onClose: () => void,
 
                 <div className="flex justify-end gap-4 pt-4 border-t-2 border-black">
                     <Button variant="secondary" onClick={onClose}>Close</Button>
-                    <Button onClick={onPrint}>Download PDF</Button>
+                    <Button onClick={onPrint} className="!bg-blue-500 !text-black hover:!bg-blue-400">Download PDF</Button>
                 </div>
             </div>
         </Modal>
@@ -462,104 +463,182 @@ const ImportInvoiceModal: React.FC<{
 }> = ({ isOpen, onClose }) => {
     const { companies, addCompany, importInvoiceWithExpenses, expenseCategories } = useAppContext();
     const [isProcessing, setIsProcessing] = useState(false);
-    const [fileName, setFileName] = useState('');
+    const [statusMessage, setStatusMessage] = useState('');
+    const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+    const [isFolderMode, setIsFolderMode] = useState(false);
+    
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) setFileName(file.name);
+        setSelectedFiles(e.target.files);
+        setStatusMessage('');
+    }
+
+    const processFile = (file: File): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                try {
+                    const base64String = (reader.result as string).split(',')[1];
+                    const ocrResult = await extractInvoiceData(base64String, file.type);
+                    if (!ocrResult) throw new Error(`Could not read data from ${file.name}`);
+
+                    let company = companies.find(c => c.name.toLowerCase() === ocrResult.companyName.toLowerCase());
+                    if (!company) {
+                        const newCompany = addCompany({
+                            name: ocrResult.companyName,
+                            address: ocrResult.companyAddress,
+                            defaultRate: ocrResult.items[0]?.amount / ocrResult.items[0]?.quantity || 500,
+                            defaultPerDiem: 50,
+                        });
+                        company = newCompany;
+                    }
+                    
+                    const newItems = ocrResult.items.map(item => ({
+                        startDate: item.start_date,
+                        endDate: item.end_date || null,
+                        description: item.description,
+                        quantity: item.quantity,
+                        unit: item.rate_description.toLowerCase().includes('day') ? 'Day' as const : 'Hourly' as const,
+                        rate: item.amount / item.quantity,
+                        amount: item.amount,
+                        approver: '',
+                        perDiemQuantity: 0, 
+                        perDiemCurrency: 'CAD' as const,
+                        id: '',
+                    }));
+
+                    if (ocrResult.perDiemQuantity > 0 && newItems.length > 0) {
+                        const mainItem = newItems.sort((a, b) => b.quantity - a.quantity)[0];
+                        mainItem.perDiemQuantity = ocrResult.perDiemQuantity;
+                    }
+
+                    const newExpenses = await Promise.all(
+                        ocrResult.expenses.map(async exp => ({
+                            date: exp.date,
+                            description: exp.description,
+                            amount: exp.amount,
+                            currency: 'CAD',
+                            cadAmount: await convertToCAD(exp.amount, 'CAD', exp.date),
+                            category: expenseCategories.includes('Misc') ? 'Misc' : expenseCategories[0],
+                            isBillable: true,
+                        }))
+                    );
+
+                    const newInvoiceData = {
+                        companyId: company.id,
+                        date: ocrResult.date,
+                        items: newItems,
+                        notes: ocrResult.notes || '',
+                        status: 'Draft' as const,
+                        hstRate: 0.13,
+                        invoiceNumber: ocrResult.invoiceNumber,
+                    };
+                    
+                    importInvoiceWithExpenses(newInvoiceData, newExpenses);
+                    resolve();
+                } catch (err: any) {
+                    reject(err);
+                }
+            };
+            reader.readAsDataURL(file);
+        });
     }
 
     const handleImport = async () => {
-        const file = fileInputRef.current?.files?.[0];
-        if (!file) {
-            alert('Please select a file to import.');
+        if (!selectedFiles || selectedFiles.length === 0) {
+            alert('Please select files to import.');
             return;
         }
 
         setIsProcessing(true);
-        const reader = new FileReader();
-        reader.onloadend = async () => {
+        setStatusMessage('Starting import...');
+        
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles.item(i);
+            if (!file) continue;
+            setStatusMessage(`Processing ${i + 1}/${selectedFiles.length}: ${file.name}`);
             try {
-                const base64String = (reader.result as string).split(',')[1];
-                const ocrResult = await extractInvoiceData(base64String, file.type);
-                if (!ocrResult) throw new Error("AI could not read the invoice.");
-
-                let company = companies.find(c => c.name.toLowerCase() === ocrResult.companyName.toLowerCase());
-                if (!company) {
-                    const newCompany = addCompany({
-                        name: ocrResult.companyName,
-                        address: ocrResult.companyAddress,
-                        defaultRate: ocrResult.items[0]?.amount / ocrResult.items[0]?.quantity || 500,
-                        defaultPerDiem: 50,
-                    });
-                    company = newCompany;
-                }
-                
-                const newItems = ocrResult.items.map(item => ({
-                    startDate: item.start_date,
-                    endDate: item.end_date || null,
-                    description: item.description,
-                    quantity: item.quantity,
-                    unit: item.rate_description.toLowerCase().includes('day') ? 'Day' as const : 'Hourly' as const,
-                    rate: item.amount / item.quantity,
-                    amount: item.amount,
-                    approver: '',
-                    perDiemQuantity: 0, 
-                    perDiemCurrency: 'CAD' as const,
-                    id: '',
-                }));
-
-                if (ocrResult.perDiemQuantity > 0 && newItems.length > 0) {
-                    const mainItem = newItems.sort((a, b) => b.quantity - a.quantity)[0];
-                    mainItem.perDiemQuantity = ocrResult.perDiemQuantity;
-                }
-
-                const newExpenses = await Promise.all(
-                    ocrResult.expenses.map(async exp => ({
-                        date: exp.date,
-                        description: exp.description,
-                        amount: exp.amount,
-                        currency: 'CAD',
-                        cadAmount: await convertToCAD(exp.amount, 'CAD', exp.date),
-                        category: expenseCategories.includes('Misc') ? 'Misc' : expenseCategories[0],
-                        isBillable: true,
-                    }))
-                );
-
-                const newInvoiceData = {
-                    companyId: company.id,
-                    date: ocrResult.date,
-                    items: newItems,
-                    notes: ocrResult.notes || '',
-                    status: 'Draft' as const,
-                    hstRate: 0.13,
-                };
-                
-                importInvoiceWithExpenses(newInvoiceData, newExpenses);
-                onClose();
-
-            } catch (err: any) {
-                alert(`Import failed: ${err.message}`);
-            } finally {
-                setIsProcessing(false);
+                await processFile(file);
+                successCount++;
+            } catch (err) {
+                console.error(err);
+                failCount++;
             }
-        };
-        reader.readAsDataURL(file);
+        }
+
+        setStatusMessage(`Import Complete. Processed ${successCount}, Failed ${failCount}.`);
+        setIsProcessing(false);
+        setTimeout(() => {
+            if (successCount > 0) onClose();
+            setStatusMessage('');
+            setSelectedFiles(null);
+        }, 2000);
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Import Invoice">
+        <Modal isOpen={isOpen} onClose={onClose} title="Import Invoices">
             <div className="space-y-4">
-                <p>Select a PDF or image file of an invoice to automatically import its data.</p>
-                <div className="border-2 border-black border-dashed p-6 text-center bg-gray-700">
-                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf,image/*" className="text-sm text-white" />
-                    {fileName && <p className="text-xs mt-1 text-gray-400 font-bold">Selected: {fileName}</p>}
+                <p>Select PDF or image files to automatically import invoices. You can select multiple files or an entire folder.</p>
+                
+                <div className="flex gap-4 mb-2">
+                    <Button 
+                        variant={!isFolderMode ? 'primary' : 'secondary'} 
+                        onClick={() => { setIsFolderMode(false); setSelectedFiles(null); }}
+                        className="text-sm !py-1"
+                    >
+                        Select Files
+                    </Button>
+                    <Button 
+                        variant={isFolderMode ? 'primary' : 'secondary'} 
+                        onClick={() => { setIsFolderMode(true); setSelectedFiles(null); }}
+                        className="text-sm !py-1"
+                    >
+                        Select Folder
+                    </Button>
                 </div>
-                {isProcessing && <p className="text-cyan-400 font-bold animate-pulse text-center">Processing with AI... This may take a moment.</p>}
+
+                <div className="border-2 border-black border-dashed p-6 text-center bg-gray-700">
+                    {!isFolderMode ? (
+                        <input 
+                            type="file" 
+                            multiple
+                            onChange={handleFileChange} 
+                            accept="application/pdf,image/*" 
+                            className="text-sm text-white w-full" 
+                        />
+                    ) : (
+                        <input 
+                            type="file" 
+                            multiple
+                            {...({ webkitdirectory: "", directory: "" } as any)}
+                            onChange={handleFileChange} 
+                            className="text-sm text-white w-full" 
+                        />
+                    )}
+                    
+                    {selectedFiles && selectedFiles.length > 0 && (
+                        <div className="mt-2 text-left bg-gray-800 p-2 max-h-32 overflow-y-auto">
+                            <p className="text-xs font-bold text-yellow-400 mb-1">{selectedFiles.length} files selected:</p>
+                            {Array.from(selectedFiles).map((f: any, i) => (
+                                <p key={i} className="text-xs text-gray-300 truncate">{f.name}</p>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                {statusMessage && (
+                    <div className="bg-black p-2 border-2 border-white">
+                        <p className="text-green-400 font-mono text-sm">{statusMessage}</p>
+                    </div>
+                )}
+                
                 <div className="flex justify-end gap-4 pt-4 border-t-2 border-black">
                     <Button variant="secondary" onClick={onClose} disabled={isProcessing}>Cancel</Button>
-                    <Button onClick={handleImport} disabled={isProcessing}>{isProcessing ? 'Importing...' : 'Import'}</Button>
+                    <Button onClick={handleImport} disabled={isProcessing || !selectedFiles}>{isProcessing ? 'Processing...' : 'Start Import'}</Button>
                 </div>
             </div>
         </Modal>
@@ -568,7 +647,7 @@ const ImportInvoiceModal: React.FC<{
 
 
 const InvoicesTab: React.FC = () => {
-    const { invoices, updateInvoice, getCompany, expenses, addInvoice, userProfile } = useAppContext();
+    const { invoices, updateInvoice, deleteInvoice, getCompany, expenses, addInvoice, userProfile } = useAppContext();
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     
@@ -585,6 +664,12 @@ const InvoicesTab: React.FC = () => {
         }
         setIsFormModalOpen(false);
         setInvoiceToEdit(null);
+    }
+
+    const handleDeleteInvoice = (id: string) => {
+        if (window.confirm("Are you sure you want to delete this invoice? Associated expenses will be detached but not deleted.")) {
+            deleteInvoice(id);
+        }
     }
     
     const openNewModal = () => {
@@ -704,7 +789,16 @@ const InvoicesTab: React.FC = () => {
                                         <div className="flex gap-1 justify-end border-t-2 border-gray-600 pt-2">
                                             <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openViewModal(invoice)}>View</Button>
                                             <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(invoice)}>Edit</Button>
-                                            <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => printInvoice(invoice.id)}>DL</Button>
+                                            <Button className="text-xs !px-2 !py-1 !border !bg-blue-500 !text-black hover:!bg-blue-400" onClick={() => printInvoice(invoice.id)} title="Download PDF">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                                </svg>
+                                            </Button>
+                                            <Button variant="danger" className="text-xs !px-2 !py-1 !border" onClick={() => handleDeleteInvoice(invoice.id)} title="Delete Invoice">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                </svg>
+                                            </Button>
                                         </div>
                                     </div>
                                 );
@@ -762,7 +856,16 @@ const InvoicesTab: React.FC = () => {
                                                     <div className="flex gap-2 justify-end">
                                                         <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openViewModal(invoice)}>View</Button>
                                                         <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => openEditModal(invoice)}>Edit</Button>
-                                                        <Button variant="secondary" className="text-xs !px-2 !py-1 !border" onClick={() => printInvoice(invoice.id)}>DL</Button>
+                                                        <Button className="text-xs !px-2 !py-1 !border !bg-blue-500 !text-black hover:!bg-blue-400" onClick={() => printInvoice(invoice.id)} title="Download PDF">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                                            </svg>
+                                                        </Button>
+                                                        <Button variant="danger" className="text-xs !px-2 !py-1 !border" onClick={() => handleDeleteInvoice(invoice.id)} title="Delete Invoice">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                            </svg>
+                                                        </Button>
                                                     </div>
                                                 </td>
                                             </tr>
