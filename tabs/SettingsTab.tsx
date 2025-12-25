@@ -167,6 +167,8 @@ const SettingsTab: React.FC = () => {
         }
     }
 
+    const sortedCategories = [...expenseCategories].sort((a, b) => a.localeCompare(b));
+
     return (
         <div>
             <h2 className="text-3xl sm:text-4xl transform -rotate-1 relative mb-6">
@@ -217,8 +219,9 @@ const SettingsTab: React.FC = () => {
                         <h3 className="font-comic-title text-2xl text-green-400 [text-shadow:2px_2px_0_black]">Expense Categories</h3>
                         <Button onClick={openAddCategoryModal} className="text-xs !px-3 !py-1 !bg-green-400 hover:!bg-green-300 !text-black tracking-wider">+ Add</Button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {expenseCategories.map(cat => (
+                    {/* Changed grid-cols-2 to grid-cols-1 for mobile view */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {sortedCategories.map(cat => (
                            <div key={cat} className="p-2 border-2 border-black bg-cyan-900 hover:bg-cyan-800 transition-colors group flex justify-between items-center shadow-[2px_2px_0_rgba(0,0,0,0.5)]">
                                 <p className="text-white font-bold uppercase tracking-wide text-sm truncate">{cat}</p>
                                 <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">

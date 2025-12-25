@@ -44,12 +44,15 @@ const printDocument = (content: string, title: string) => {
 
 const ExpenseForm: React.FC<{ expense?: Expense | null, onSave: (expense: Omit<Expense, 'id'> | Expense) => void, onCancel: () => void }> = ({ expense, onSave, onCancel }) => {
   const { expenseCategories } = useAppContext();
+  // Sort categories alphabetically for the dropdown
+  const sortedCategories = [...expenseCategories].sort((a, b) => a.localeCompare(b));
+  
   const [formData, setFormData] = useState<Omit<Expense, 'id' | 'cadAmount'>>({
     date: expense?.date || new Date().toISOString().split('T')[0],
     description: expense?.description || '',
     amount: expense?.amount || 0,
     currency: expense?.currency || 'CAD',
-    category: expense?.category || expenseCategories[0] || 'Misc',
+    category: expense?.category || sortedCategories[0] || 'Misc',
     receiptUrl: expense?.receiptUrl || '',
     isBillable: expense?.isBillable || false,
     billedToInvoiceId: expense?.billedToInvoiceId,
@@ -144,7 +147,7 @@ const ExpenseForm: React.FC<{ expense?: Expense | null, onSave: (expense: Omit<E
         <div>
             <label className={labelClass}>Category</label>
             <select name="category" value={formData.category} onChange={handleChange} className={inputClass}>
-                {expenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                {sortedCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
             </select>
         </div>
        </div>
